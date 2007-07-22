@@ -137,7 +137,10 @@ class Admin(callbacks.Plugin):
         networkGroup.channels().add(channel)
         if key:
             networkGroup.channels.key.get(channel).setValue(key)
-        maxchannels = irc.state.supported.get('maxchannels', sys.maxint)
+        if networkGroup.maxChannels():
+            maxchannels = networkGroup.maxChannels()
+        else:
+            maxchannels = irc.state.supported.get('maxchannels', sys.maxint)
         if len(irc.state.channels) + 1 > maxchannels:
             irc.error('I\'m already too close to maximum number of '
                       'channels for this network.', Raise=True)

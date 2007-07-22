@@ -43,7 +43,7 @@ _pluginsDir = os.path.join(installDir, 'plugins')
 ###
 # version: This should be pretty obvious.
 ###
-version = '0.83.2+darcs'
+version = '0.83.2+nullmonkey/clones'
 
 ###
 # *** The following variables are affected by command-line options.  They are
@@ -274,8 +274,28 @@ def registerNetwork(name, password='', ssl=False):
     registerGlobalValue(network, 'ssl', registry.Boolean(ssl,
         """Determines whether the bot will attempt to connect with SSL sockets
         to %s.""" % name))
+    registerGlobalValue(network, 'maxChannels', registry.Integer(0,
+        """Override the maximum channels reported by the server. Set to 
+        0 to use value reported by server."""))
+    registerGlobalValue(network, 'numberOfClones', registry.Integer(1,
+        """Determines the number of clones for this network. Set to 1 to 
+        disable clones on this network."""))
+    registerGlobalValue(network, 'channelsPerClone', registry.Integer(10,
+        """Determines the maximum number of channels allocated to a 
+        clone."""))
+    registerGlobalValue(network, 'clonesPerInterface', registry.Integer(0,
+        """Determines how many clones on this network will be allocated 
+        to a single interface. 0 to disable multiple interfaces."""))
     registerChannelValue(network.channels, 'key', registry.String('',
         """Determines what key (if any) will be used to join the channel."""))
+    registerChannelValue(network.channels, 'clone', registry.Integer(0,
+        """Determines the clone this channel is allocated to. Not applicable 
+        if enableClones is False for this network or allClones is True."""))
+    registerChannelValue(network.channels, 'allClones',
+        registry.Boolean(False, """Determines whether all the clones will
+        join this channel. WARNING: This can cause some really weird 
+        behaviour if plugins aren't prepared for this. You have been 
+        warned!"""))
     return network
 
 # Let's fill our networks.
@@ -286,6 +306,18 @@ for (name, s) in registry._cache.iteritems():
         if name != 'default':
             registerNetwork(name)
 
+
+###
+# Clone system configuration
+###
+registerGroup(supybot, 'clones')
+
+registerGlobalValue(supybot.clones, 'interfaces',
+    registry.SpaceSeparatedListOfStrings('', """Determines the pool of 
+    interfaces used for clones. An interface will only be used once on each
+    network. Add new interfaces to the end of the list - the order is 
+    important. Not required if multiple interfaces is disabled on every
+    network."""))
 
 ###
 # Reply/error tweaking.
@@ -772,7 +804,7 @@ class Databases(registry.SpaceSeparatedListOfStrings):
         v = super(Databases, self).__call__()
         if not v:
             v = ['anydbm', 'cdb', 'flat', 'pickle']
-            if 'sqlite' in sys.modules:
+            if 'pysqlite2' in sys.modules or 'sqlite3' in sys.modules:
                 v.insert(0, 'sqlite')
         return v
 
@@ -916,7 +948,8 @@ registerGlobalValue(supybot.protocols.irc, 'umodes',
 
 registerGlobalValue(supybot.protocols.irc, 'vhost',
     registry.String('', """Determines what vhost the bot will bind to before
-    connecting to the IRC server."""))
+    connecting to the IRC server. Only applicable if multiple interface
+    support is disabled for the network."""))
 
 registerGlobalValue(supybot.protocols.irc, 'maxHistoryLength',
     registry.Integer(1000, """Determines how many old messages the bot will

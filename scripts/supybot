@@ -326,6 +326,8 @@ if __name__ == '__main__':
     import supybot.ircmsgs as ircmsgs
     import supybot.drivers as drivers
     import supybot.callbacks as callbacks
+    
+    # Load plugins and connect to networks
     import supybot.plugins.Owner as Owner
 
     owner = Owner.Class()

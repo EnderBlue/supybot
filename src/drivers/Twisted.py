@@ -120,7 +120,10 @@ class SupyReconnectingFactory(ReconnectingClientFactory, drivers.ServersMixin):
         self.irc = irc
         drivers.ServersMixin.__init__(self, irc)
         (server, port) = self._getNextServer()
-        vhost = conf.supybot.protocols.irc.vhost()
+        if self.networkGroup.clonesPerInterface():
+            vhost = self.irc.interface
+        else:
+            vhost = conf.supybot.protocols.irc.vhost()
         if self.networkGroup.get('ssl').value:
             self.connectSSL(server, port, vhost)
         else:

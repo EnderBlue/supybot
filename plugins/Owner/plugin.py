@@ -205,17 +205,44 @@ class Owner(callbacks.Plugin):
             conf.supybot.networks.get(network).servers.append(serverS)
             assert conf.supybot.networks.get(network).servers(), \
                    'No servers are set for the %s network.' % network
-        self.log.info('Creating new Irc for %s.', network)
-        newIrc = irclib.Irc(network)
-        for irc in world.ircs:
-            if irc != newIrc:
-                newIrc.state.history = irc.state.history
-        driver = drivers.newDriver(newIrc)
-        self._loadPlugins(newIrc)
-        return newIrc
+        newIrcs = []
+        # Clones are numbered 0 through (numberOfClones - 1) inclusive
+        for clone in range(group.numberOfClones()):
+            self.log.info('Creating new Irc for %s, clone %s.', 
+                network, clone)
+            # Multiple interface support for clones?
+            interface = ''
+            if group.clonesPerInterface():
+                if conf.supybot.clones.interfaces()[:] == []:
+                    raise ValueError, 'multiple interface clones have been ' \
+                                      'enabled, but there are no interfaces' \
+                                      ' defined'
+                for s in conf.supybot.clones.interfaces()[:]:
+                    i = 0
+                    for clone in world.getIrcs(self.irc.network):
+                        if clone.interface == s:
+                            i += 1
+                        if i >= group.clonesPerInterface:
+                            break
+                    else:
+                        interface = s
+                        break
+                if interface == '':
+                    raise ValueError, 'all interfaces have reached ' \
+                                      'clonesPerInterface, please add more'
+            newIrc = irclib.Irc(network, clone=clone, interface=interface)
+            # What's this all about?
+            for irc in world.ircs:
+                if irc != newIrc:
+                    newIrc.state.history = irc.state.history
+            driver = drivers.newDriver(newIrc)
+            self._loadPlugins(newIrc)
+            newIrcs.append(newIrc)
+        return newIrcs
 
     def _loadPlugins(self, irc):
-        self.log.info('Loading plugins (connecting to %s).', irc.network)
+        self.log.info('Loading plugins (connecting to %s, clone %s).', 
+            irc.network, irc.clone)
         alwaysLoadImportant = conf.supybot.plugins.alwaysLoadImportant()
         important = conf.supybot.commands.defaultPlugins.importantPlugins()
         for (name, value) in conf.supybot.plugins.getValues(fullNames=False):
@@ -261,7 +288,9 @@ class Owner(callbacks.Plugin):
     def do376(self, irc, msg):
         networkGroup = conf.supybot.networks.get(irc.network)
         for channel in networkGroup.channels():
-            irc.queueMsg(networkGroup.channels.join(channel))
+            if networkGroup.channels.clone.get(channel) == irc.clone \
+                or networkGroup.channels.allClones.get(channel):
+                irc.queueMsg(networkGroup.channels.join(channel))
     do422 = do377 = do376
 
     def doPrivmsg(self, irc, msg):

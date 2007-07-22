@@ -67,6 +67,7 @@ class Status(callbacks.Plugin):
 
         Returns the status of the bot.
         """
+        # TODO: add clones to message (number of clones?)
         networks = {}
         for Irc in world.ircs:
             networks.setdefault(Irc.network, []).append(Irc.nick)

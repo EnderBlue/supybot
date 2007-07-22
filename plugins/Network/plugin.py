@@ -56,7 +56,8 @@ class Network(callbacks.Plugin):
         provided in <network>) at <host:port>.  If port is not provided, it
         defaults to 6667, the default port for IRC.  If password is
         provided, it will be sent to the server in a PASS command.  If --ssl is
-        provided, an SSL connection will be attempted.
+        provided, an SSL connection will be attempted. Clone support is 
+        disabled by default.
         """
         try:
             otherIrc = self._getIrc(network)
@@ -102,6 +103,7 @@ class Network(callbacks.Plugin):
         from the network the command is sent on.
         """
         quitMsg = quitMsg or conf.supybot.plugins.Owner.quitMsg() or msg.nick
+        # TODO: Find all clones
         otherIrc.queueMsg(ircmsgs.quit(quitMsg))
         otherIrc.die()
         conf.supybot.networks().discard(otherIrc.network)

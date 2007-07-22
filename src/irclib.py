@@ -597,11 +597,13 @@ class Irc(IrcCommandDispatcher):
                         '333', '353', '332', '366', '005'])
     # We specifically want these callbacks to be common between all Ircs,
     # that's why we don't do the normal None default with a check.
-    def __init__(self, network, callbacks=_callbacks):
+    def __init__(self, network, callbacks=_callbacks, clone=0, interface=''):
         self.zombie = False
         world.ircs.append(self)
         self.network = network
         self.callbacks = callbacks
+        self.clone = clone
+        self.interface = interface
         self.state = IrcState()
         self.queue = IrcMsgQueue()
         self.fastqueue = smallqueue()
@@ -850,7 +852,10 @@ class Irc(IrcCommandDispatcher):
 
     def _setNonResettingVariables(self):
         # Configuration stuff.
-        self.nick = conf.supybot.nick()
+        if self.clone != 0:
+            self.nick = ''.join([conf.supybot.nick(), str(self.clone)])
+        else:
+            self.nick = conf.supybot.nick()
         self.user = conf.supybot.user()
         self.ident = conf.supybot.ident()
         self.alternateNicks = conf.supybot.nick.alternates()[:]
@@ -1020,10 +1025,11 @@ class Irc(IrcCommandDispatcher):
         return not (self == other)
 
     def __str__(self):
-        return 'Irc object for %s' % self.network
+        return 'Irc object for %s, clone %s' % (self.network, self.clone)
 
     def __repr__(self):
-        return '<irclib.Irc object for %s>' % self.network
+        return '<irclib.Irc object for %s, clone %s>' \
+            % (self.network, self.clone)
 
 
 # vim:set shiftwidth=4 softtabstop=4 expandtab textwidth=79:

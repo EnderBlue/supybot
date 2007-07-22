@@ -379,6 +379,7 @@ class User(callbacks.Plugin):
         commands that include a password) must be sent to the bot privately,
         not in a channel.
         """
+        # TODO: identify for all clones?
         if user.checkPassword(password):
             try:
                 user.addAuth(msg.prefix)

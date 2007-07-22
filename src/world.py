@@ -72,11 +72,23 @@ commandsProcessed = 0
 ircs = [] # A list of all the IRCs.
 
 def getIrc(network):
+    """Depreciated, use getIrcs(). Only works if clones are
+    disabled for the network, otherwise is useless."""
+    clones = getIrcs(network)
+    if clones.has_key(0):
+        return clones[0]
+    else:
+        return None
+
+def getIrcs(network):
+    """Returns a dictionary of clones from a particular network where the key
+    is the clone number and the value is the IRC object."""
     network = network.lower()
+    clones = {}
     for irc in ircs:
         if irc.network.lower() == network:
-            return irc
-    return None
+            clones[irc.clone] = irc
+    return clones
 
 def _flushUserData():
     userdataFilename = os.path.join(conf.supybot.directories.conf(),
