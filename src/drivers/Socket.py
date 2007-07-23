@@ -59,6 +59,7 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
         self.scheduled = None
         self.connected = False
         self.resetDelay()
+        self.scheduledResetDelay = None
         # Only connect to non-SSL servers
         if self.networkGroup.get('ssl').value:
             drivers.log.error('The Socket driver can not connect to SSL '
@@ -136,7 +137,7 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
     def connect(self, **kwargs):
         self.reconnect(reset=False, **kwargs)
 
-    def reconnect(self, reset=True):
+    def reconnect(self, reset=True, wait=False):
         self.scheduled = None
         if self.connected:
             drivers.log.reconnect(self.irc.network)
@@ -147,6 +148,9 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
             self.irc.reset()
         else:
             drivers.log.debug('Not resetting %s.', self.irc)
+        if wait:
+            self.scheduleReconnect()
+            return
         server = self._getNextServer()
         drivers.log.connect(self.currentServer)
         try:
@@ -167,7 +171,6 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
             self.conn.connect(server)
             self.conn.settimeout(conf.supybot.drivers.poll())
             self.connected = True
-            self.resetDelay()
         except socket.error, e:
             if e.args[0] == 115:
                 now = time.time()
@@ -187,7 +190,6 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
         if w:
             drivers.log.debug('Socket is writable, it might be connected.')
             self.connected = True
-            self.resetDelay()
         else:
             drivers.log.connectError(self.currentServer, 'Timed out')
             self.reconnect()
@@ -203,6 +205,16 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
                               'this to happen.')
             schedule.removeEvent(self.scheduled)
         self.scheduled = schedule.addEvent(self.reconnect, when)
+        
+        # After so self.getDelay() can update self.currentDelay
+        try:
+            schedule.removeEvent(self.scheduledResetDelay)
+        except KeyError:
+            pass
+        # We're assuming that after 30 seconds, the server hasn't 
+        # refused the connection
+        self.scheduledResetDelay = schedule.addEvent( self.resetDelay, \
+                time.time() + self.currentDelay + 30 )
 
     def die(self):
         self.zombie = True
