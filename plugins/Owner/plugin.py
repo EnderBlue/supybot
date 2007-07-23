@@ -208,38 +208,44 @@ class Owner(callbacks.Plugin):
         newIrcs = []
         # Clones are numbered 0 through (numberOfClones - 1) inclusive
         for clone in range(group.numberOfClones()):
-            self.log.info('Creating new Irc for %s, clone %s.', 
-                network, clone)
-            # Multiple interface support for clones?
-            interface = ''
-            if group.clonesPerInterface():
-                if conf.supybot.clones.interfaces()[:] == []:
-                    raise ValueError, 'multiple interface clones have been ' \
-                                      'enabled, but there are no interfaces' \
-                                      ' defined'
-                for s in conf.supybot.clones.interfaces()[:]:
-                    i = 0
-                    for clone in world.getIrcs(self.irc.network):
-                        if clone.interface == s:
-                            i += 1
-                        if i >= group.clonesPerInterface:
-                            break
-                    else:
-                        interface = s
-                        break
-                if interface == '':
-                    raise ValueError, 'all interfaces have reached ' \
-                                      'clonesPerInterface, please add more'
-            newIrc = irclib.Irc(network, clone=clone, interface=interface)
-            # What's this all about?
-            for irc in world.ircs:
-                if irc != newIrc:
-                    newIrc.state.history = irc.state.history
-            driver = drivers.newDriver(newIrc)
-            self._loadPlugins(newIrc)
-            newIrcs.append(newIrc)
+            newIrcs.append(self._connectClone(network, clone))
         return newIrcs
-
+    
+    def _connectClone(self, network, clone):
+        self.log.info('Creating new Irc for %s, clone %s.', 
+            network, clone)
+        group = conf.supybot.networks.get(network)
+        # Multiple interface support for clones? NOT TESTED
+        interface = ''
+        if group.clonesPerInterface():
+            self.log.debug('Multiple interface support enabled on network ' \
+                           '%s, clone %s' % (network, clone))
+            if conf.supybot.clones.interfaces()[:] == []:
+                raise ValueError, 'multiple interface clones have been ' \
+                                  'enabled, but there are no interfaces' \
+                                  ' defined'
+            for s in conf.supybot.clones.interfaces()[:]:
+                n = 0
+                for i in world.getIrcs(self.irc.network):
+                    if i.interface == s:
+                        n += 1
+                    if n >= group.clonesPerInterface():
+                        break
+                else:
+                    interface = s
+                    break
+            if interface == '':
+                raise ValueError, 'all interfaces have reached ' \
+                                  'clonesPerInterface, please add more'
+        newIrc = irclib.Irc(network, clone=clone, interface=interface)
+        # What's this all about?
+        for irc in world.ircs:
+            if irc != newIrc:
+                newIrc.state.history = irc.state.history
+        driver = drivers.newDriver(newIrc)
+        self._loadPlugins(newIrc)
+        return newIrc
+        
     def _loadPlugins(self, irc):
         self.log.info('Loading plugins (connecting to %s, clone %s).', 
             irc.network, irc.clone)
@@ -288,8 +294,8 @@ class Owner(callbacks.Plugin):
     def do376(self, irc, msg):
         networkGroup = conf.supybot.networks.get(irc.network)
         for channel in networkGroup.channels():
-            if networkGroup.channels.clone.get(channel) == irc.clone \
-                or networkGroup.channels.allClones.get(channel):
+            if networkGroup.channels.clone.get(channel).value == irc.clone \
+                    or networkGroup.channels.allClones.get(channel).value:
                 irc.queueMsg(networkGroup.channels.join(channel))
     do422 = do377 = do376
 

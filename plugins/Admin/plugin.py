@@ -135,6 +135,8 @@ class Admin(callbacks.Plugin):
             irc.errorInvalid('channel', channel, Raise=True)
         networkGroup = conf.supybot.networks.get(irc.network)
         networkGroup.channels().add(channel)
+        networkGroup.channels.clone.get(channel).setValue(irc.clone)
+        networkGroup.channels.allClones.get(channel).setValue(False)
         if key:
             networkGroup.channels.key.get(channel).setValue(key)
         if networkGroup.maxChannels():
@@ -143,7 +145,7 @@ class Admin(callbacks.Plugin):
             maxchannels = irc.state.supported.get('maxchannels', sys.maxint)
         if len(irc.state.channels) + 1 > maxchannels:
             irc.error('I\'m already too close to maximum number of '
-                      'channels for this network.', Raise=True)
+                      'channels for this network (or clone).', Raise=True)
         irc.queueMsg(networkGroup.channels.join(channel))
         irc.noReply()
         self.joins[channel] = (irc, msg)

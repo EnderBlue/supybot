@@ -37,6 +37,7 @@ plugins = [
     'Channel',
     'ChannelLogger',
     'ChannelStats',
+    'Clone',
     'Config',
     'Ctcp',
     'Dict',

@@ -276,13 +276,11 @@ def registerNetwork(name, password='', ssl=False):
         to %s.""" % name))
     registerGlobalValue(network, 'maxChannels', registry.Integer(0,
         """Override the maximum channels reported by the server. Set to 
-        0 to use value reported by server."""))
+        0 to use value reported by server. Also used for maximum number of
+        channels allocated to a clone."""))
     registerGlobalValue(network, 'numberOfClones', registry.Integer(1,
         """Determines the number of clones for this network. Set to 1 to 
         disable clones on this network."""))
-    registerGlobalValue(network, 'channelsPerClone', registry.Integer(10,
-        """Determines the maximum number of channels allocated to a 
-        clone."""))
     registerGlobalValue(network, 'clonesPerInterface', registry.Integer(0,
         """Determines how many clones on this network will be allocated 
         to a single interface. 0 to disable multiple interfaces."""))
@@ -293,9 +291,9 @@ def registerNetwork(name, password='', ssl=False):
         if enableClones is False for this network or allClones is True."""))
     registerChannelValue(network.channels, 'allClones',
         registry.Boolean(False, """Determines whether all the clones will
-        join this channel. WARNING: This can cause some really weird 
-        behaviour if plugins aren't prepared for this. You have been 
-        warned!"""))
+        join this channel. Only the clone that the channel has been allocated
+        will speak or pay attention to any commands. The rest are just 
+        zombies."""))
     return network
 
 # Let's fill our networks.
