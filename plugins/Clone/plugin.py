@@ -84,6 +84,10 @@ class Clone(callbacks.Plugin):
             irc.error('There is only one clone left in this network, use ' \
                       'the Network plugin instead.')
             return
+        if len(cloneIrcs) - num <= 0:
+            irc.error('Removing that many clones will leave us with no ' \
+                      'clones on the network. Try removing fewer.')
+            return
         currentIrcKilled = False
         for i in range(num):
             ircToKill = cloneIrcs[networkGroup.numberOfClones() - 1]
@@ -120,6 +124,7 @@ class Clone(callbacks.Plugin):
         if not cloneIrcs.has_key(clone):
             irc.error('Clone specified does not exist on this network')
         cloneIrcs[clone].queueMsg(ircmsgs.quit(quitMsg))
+        cloneIrcs[clone].driver.reconnect()
         if cloneIrcs[clone] != irc:
             # No need to reply if we're reconnecting ourselves.
             irc.replySuccess()

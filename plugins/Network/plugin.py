@@ -85,11 +85,14 @@ class Network(callbacks.Plugin):
                           'already registered.')
                 return
         Owner = irc.getCallback('Owner')
-        newIrc = Owner._connect(network, serverPort=serverPort,
+        newIrcs = Owner._connect(network, serverPort=serverPort,
                                 password=password, ssl=ssl)
         conf.supybot.networks().add(network)
-        assert newIrc.callbacks is irc.callbacks, 'callbacks list is different'
-        irc.replySuccess('Connection to %s initiated.' % network)
+        if len(newIrcs) == 1:
+            irc.replySuccess('Connection to %s initiated.' % network)
+        else:
+            irc.replySuccess('Connection for %s clones to %s initiated.' \
+                % (len(newIrcs), network))
     connect = wrap(connect, ['owner', getopts({'ssl': ''}), 'something',
                              additional('something'),
                              additional('something', '')])
@@ -123,6 +126,7 @@ class Network(callbacks.Plugin):
         """
         quitMsg = quitMsg or conf.supybot.plugins.Owner.quitMsg() or msg.nick
         otherIrc.queueMsg(ircmsgs.quit(quitMsg))
+        otherIrc.driver.reconnect()
         if otherIrc != irc:
             # No need to reply if we're reconnecting ourselves.
             irc.replySuccess()

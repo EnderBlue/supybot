@@ -207,7 +207,8 @@ class Owner(callbacks.Plugin):
                    'No servers are set for the %s network.' % network
         newIrcs = []
         # Clones are numbered 0 through (numberOfClones - 1) inclusive
-        for clone in range(group.numberOfClones()):
+        for clone in \
+                range(conf.supybot.networks.get(network).numberOfClones()):
             newIrcs.append(self._connectClone(network, clone))
         return newIrcs
     
@@ -221,13 +222,15 @@ class Owner(callbacks.Plugin):
             self.log.debug('Multiple interface support enabled on network ' \
                            '%s, clone %s' % (network, clone))
             if conf.supybot.clones.interfaces()[:] == []:
-                raise ValueError, 'multiple interface clones have been ' \
+                self.log.error('multiple interface clones have been ' \
                                   'enabled, but there are no interfaces' \
-                                  ' defined'
+                                  ' defined')
+                return
             for s in conf.supybot.clones.interfaces()[:]:
                 n = 0
-                for i in world.getIrcs(self.irc.network):
-                    if i.interface == s:
+                ircs = world.getIrcs(network)
+                for c, i in ircs.items():
+                    if i and i.interface == s:
                         n += 1
                     if n >= group.clonesPerInterface():
                         break
@@ -235,8 +238,9 @@ class Owner(callbacks.Plugin):
                     interface = s
                     break
             if interface == '':
-                raise ValueError, 'all interfaces have reached ' \
-                                  'clonesPerInterface, please add more'
+                self.log.error('all interfaces have reached ' \
+                               'clonesPerInterface, please add more')
+                return
         newIrc = irclib.Irc(network, clone=clone, interface=interface)
         # What's this all about?
         for irc in world.ircs:

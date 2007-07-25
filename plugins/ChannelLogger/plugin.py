@@ -134,8 +134,11 @@ class ChannelLogger(callbacks.Plugin):
 
     def getLog(self, irc, channel):
         networkGroup = conf.supybot.networks.get(irc.network)
-        # If all the clones join this channel, just let clone 0 log it
-        if networkGroup.channels.allClones.get(channel) and irc.clone != 0:
+        # If all the clones join this channel, just let the unzombied clone
+        # log it
+        if (networkGroup.channels.allClones.get(channel).value \
+            and irc.clone != networkGroup.channels.clone.get(channel).value) \
+            or not self.registryValue('enabled', channel):
             return FakeLog()
         self.checkLogNames()
         try:
