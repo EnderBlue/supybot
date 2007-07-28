@@ -660,6 +660,13 @@ registerGlobalValue(supybot.commands.defaultPlugins, 'importantPlugins',
 # supybot.abuse.  For stuff relating to abuse of the bot.
 ###
 registerGroup(supybot, 'abuse')
+registerGlobalValue(supybot.abuse, 'ignorePattern',
+    registry.String('', """Determines the regex pattern that, if matched, will
+    cause a message in a channel or PM to be completely ignored. Regex is case 
+    insensitive. Leave blank to disable. Handy for stopping IRC viruses or 
+    normal messages that might be picked up as a command ("=]" when the prefix 
+    is "=" for example)."""))
+
 registerGroup(supybot.abuse, 'flood')
 registerGlobalValue(supybot.abuse.flood, 'command',
     registry.Boolean(True, """Determines whether the bot will defend itself
@@ -690,7 +697,6 @@ registerGlobalValue(supybot.abuse.flood.command.invalid, 'punishment',
     value is higher than supybot.abuse.flood.command.punishment, since it's far
     less likely (and far more annoying) for users to flood witih invalid
     commands than for them to flood with valid commands."""))
-
 
 ###
 # supybot.drivers.  For stuff relating to Supybot's drivers (duh!)

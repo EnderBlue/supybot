@@ -1220,7 +1220,20 @@ class PluginMixin(BasePlugin, irclib.IrcCallback):
     def __call__(self, irc, msg):
         irc = SimpleProxy(irc, msg)
         if msg.command == 'PRIVMSG':
-            if self.noIgnore or not ircdb.checkIgnored(msg.prefix,msg.args[0]):
+            ignore = False
+            # This channel has allClones, but we're not allowed to do anything
+            networkGroup = conf.supybot.networks.get(irc.network)
+            if ircutils.isChannel(msg.args[0]) and \
+                    networkGroup.channels.allClones.get(msg.args[0]).value \
+                    and networkGroup.channels.clone.get(msg.args[0]).value \
+                    != irc.clone:
+                ignore = True
+            elif conf.supybot.abuse.ignorePattern():
+                r = re.compile(conf.supybot.abuse.ignorePattern(), re.I)
+                if r.search(msg.args[1]):
+                    ignore = True
+            if not ignore and (self.noIgnore
+                    or not ircdb.checkIgnored(msg.prefix,msg.args[0])):
                 self.__parent.__call__(irc, msg)
         else:
             self.__parent.__call__(irc, msg)
