@@ -88,11 +88,8 @@ class Network(callbacks.Plugin):
         newIrcs = Owner._connect(network, serverPort=serverPort,
                                 password=password, ssl=ssl)
         conf.supybot.networks().add(network)
-        if len(newIrcs) == 1:
-            irc.replySuccess('Connection to %s initiated.' % network)
-        else:
-            irc.replySuccess('Connection for %s clones to %s initiated.' \
-                % (len(newIrcs), network))
+        irc.replySuccess('Connection for %n to %s initiated.' \
+            % ((len(newIrcs), 'clone'), network))
     connect = wrap(connect, ['owner', getopts({'ssl': ''}), 'something',
                              additional('something'),
                              additional('something', '')])
@@ -106,13 +103,15 @@ class Network(callbacks.Plugin):
         from the network the command is sent on.
         """
         quitMsg = quitMsg or conf.supybot.plugins.Owner.quitMsg() or msg.nick
-        # TODO: Find all clones
-        otherIrc.queueMsg(ircmsgs.quit(quitMsg))
-        otherIrc.die()
+        cloneIrcs = world.getIrcs(otherIrc.network)
+        for c, i in cloneIrcs.items():
+             i.queueMsg(ircmsgs.quit(quitMsg))
+             i.die()
         conf.supybot.networks().discard(otherIrc.network)
-        if otherIrc != irc:
-            irc.replySuccess('Disconnection to %s initiated.' %
-                             otherIrc.network)
+        if irc not in cloneIrcs:
+            irc.replySuccess(utils.str.format('Disconnection of %n on %s '
+                            'initiated.', (len(cloneIrcs), 'clone'),
+                            otherIrc.network))
     disconnect = wrap(disconnect, ['owner', 'networkIrc', additional('text')])
 
     def reconnect(self, irc, msg, args, otherIrc, quitMsg):
@@ -125,11 +124,15 @@ class Network(callbacks.Plugin):
         command.
         """
         quitMsg = quitMsg or conf.supybot.plugins.Owner.quitMsg() or msg.nick
-        otherIrc.queueMsg(ircmsgs.quit(quitMsg))
-        otherIrc.driver.reconnect()
-        if otherIrc != irc:
+        cloneIrcs = world.getIrcs(otherIrc.network)
+        for c, i in cloneIrcs.items():
+            i.queueMsg(ircmsgs.quit(quitMsg))
+            i.driver.reconnect()
+        if irc not in cloneIrcs:
             # No need to reply if we're reconnecting ourselves.
-            irc.replySuccess()
+            irc.replySuccess(utils.str.format('Reconnection of %n on %s '
+                            'initiated.', (len(cloneIrcs), 'clone'),
+                            otherIrc.network))
     reconnect = wrap(reconnect, ['owner', 'networkIrc', additional('text')])
 
     def command(self, irc, msg, args, otherIrc, commandAndArgs):

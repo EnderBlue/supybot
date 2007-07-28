@@ -259,6 +259,9 @@ class SpaceSeparatedSetOfChannels(registry.SpaceSeparatedListOf):
         else:
             return ircmsgs.join(channel)
 
+class SpaceSeparatedListOfIntegers(registry.SpaceSeparatedListOf):
+    Value = registry.Integer
+
 def registerNetwork(name, password='', ssl=False):
     network = registerGroup(supybot.networks, name)
     registerGlobalValue(network, 'password', registry.String(password,
@@ -284,6 +287,9 @@ def registerNetwork(name, password='', ssl=False):
     registerGlobalValue(network, 'clonesPerInterface', registry.Integer(0,
         """Determines how many clones on this network will be allocated 
         to a single interface. 0 to disable multiple interfaces."""))
+    registerGlobalValue(network, 'protectedClones', 
+        SpaceSeparatedListOfIntegers('', """Determines which clones will not 
+        have channels automatically allocated to them."""))
     registerChannelValue(network.channels, 'key', registry.String('',
         """Determines what key (if any) will be used to join the channel."""))
     registerChannelValue(network.channels, 'clone', registry.Integer(0,

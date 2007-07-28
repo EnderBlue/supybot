@@ -29,6 +29,7 @@
 ###
 
 import supybot.conf as conf
+import supybot.ircdb as ircdb
 import supybot.utils as utils
 import supybot.world as world
 from supybot.commands import *
@@ -60,12 +61,9 @@ class Clone(callbacks.Plugin):
                 return
             networkGroup.numberOfClones.setValue( \
                     networkGroup.numberOfClones() + 1)
-        if num == 1:
-            irc.replySuccess('Connection initiated for clone %s on %s' % \
-                    (networkGroup.numberOfClones() - 1, otherIrc.network))
-        else:
-            irc.replySuccess('Connection for %s clones on %s initiated' % \
-                             (num, otherIrc.network))
+        
+        irc.replySuccess(utils.str.format('Connection for %n on %s initiated',
+                         (num, 'clone'), otherIrc.network))
     add = wrap(add, ['owner', additional('int'), 'networkIrc'])
 
     def remove(self, irc, msg, args, num, otherIrc, quitMsg):
@@ -98,12 +96,8 @@ class Clone(callbacks.Plugin):
             if ircToKill == irc:
                 currentIrcKilled = True
         if not currentIrcKilled:
-            if num == 1:
-                irc.replySuccess('Clone %s on %s has been disconnected' % \
-                        (networkGroup.numberOfClones(), otherIrc.network))
-            else:
-                irc.replySuccess('%s clones disconnected on %s' % \
-                                 (num, otherIrc.network))
+            irc.replySuccess(utils.str.format('%n disconnected on %s',
+                             (num, 'clone'), otherIrc.network))
     remove = wrap(remove, ['owner', additional('int'), 'networkIrc', \
                     additional('text')])
     
@@ -130,6 +124,99 @@ class Clone(callbacks.Plugin):
             irc.replySuccess()
     reconnect = wrap(reconnect, ['owner', additional('int'), 'networkIrc', \
                                  additional('text')])
+    
+    def announce(self, irc, msg, args, text):
+        """<text>
+
+        Sends <text> to all channels all the clones are currently on and not
+        lobotomized in.
+        """
+        u = ircdb.users.getUser(msg.prefix)
+        text = 'Announcement from my owner (%s): %s' % (u.name, text)
+        
+        cloneIrcs = world.getIrcs(irc.network)
+        for i in cloneIrcs.values():
+            for channel in i.state.channels:
+                c = ircdb.channels.getChannel(channel)
+                if not c.lobotomized:
+                    i.queueMsg(ircmsgs.privmsg(channel, text))
+        irc.noReply()
+    announce = wrap(announce, ['owner', 'text'])
+    
+    def join(self, irc, msg, args, channel, key):
+        """<channel> [<key>]
+        
+        Finds the clone with the fewest channels (taking into account 
+        configured protected clones) and tells it to join the given channel.
+        If <key> is given, it is used when attempting to join the channel."""
+        if not irc.isChannel(channel):
+            irc.errorInvalid('channel', channel, Raise=True)
+        networkGroup = conf.supybot.networks.get(irc.network)
+        cloneIrcs = world.getIrcs(irc.network)
+        Admin = irc.getCallback('Admin')
+        chosenIrc = None
+        # FIXME: HACK: the Irc object runs into an infinite loop with 
+        # comparision to None. this is a quick fix, I'll look into why later
+        chosenIrcBool = False
+        for i in cloneIrcs.values():
+            if networkGroup.maxChannels():
+                maxchannels = networkGroup.maxChannels()
+            else:
+                maxchannels = i.state.supported.get('maxchannels',
+                                sys.maxint)
+            if str(i.clone) not in networkGroup.protectedClones() \
+                    and len(i.state.channels) + 1 <= maxchannels \
+                    and (chosenIrcBool == False or 
+                    len(i.state.channels) < len(chosenIrc.state.channels)):
+                chosenIrc = i
+                chosenIrcBool = True
+        if chosenIrcBool == False:
+            irc.error("There isn't a clone with any space for joining. "
+                      "Either add more clones, free up some clones in the "
+                      "protectedClones setting or part some channels.",
+                      Raise=True)
+        networkGroup.channels().add(channel)
+        networkGroup.channels.clone.get(channel).setValue(chosenIrc.clone)
+        networkGroup.channels.allClones.get(channel).setValue(False)
+        if key:
+            networkGroup.channels.key.get(channel).setValue(key)
+        chosenIrc.queueMsg(networkGroup.channels.join(channel))
+        irc.replySuccess("Initiated join for clone %s." % chosenIrc.clone)
+        Admin.joins[channel] = (irc, msg)
+    join = wrap(join, ['validChannel', additional('something')])
+
+    def part(self, irc, msg, args, channel, reason):
+        """[<channel>] [<reason>]
+
+        Finds the clone that is in <channel> and tells is to part it  
+        <channel> is only necessary if you want the bot to part a channel 
+        other than the current channel.  If <reason> is specified, use it as 
+        the part message.
+        """
+        chosenIrcs = []
+        if channel is None:
+            if irc.isChannel(msg.args[0]):
+                channel = msg.args[0]
+                chosenIrcs.append(irc)
+            else:
+                irc.error(Raise=True)
+        else:
+            cloneIrcs = world.getIrcs(irc.network)
+            for i in cloneIrcs.values():
+                if channel in i.state.channels:
+                    chosenIrcs.append(i)
+        try:
+            network = conf.supybot.networks.get(irc.network)
+            network.channels().remove(channel)
+        except KeyError:
+            pass
+        if not chosenIrcs:
+            irc.error('I\'m not in %s.' % channel, Raise=True)
+        for i in chosenIrcs:
+            i.queueMsg(ircmsgs.part(channel, reason or msg.nick))
+        irc.noReply()
+    part = wrap(part, [optional('validChannel'), additional('text')])
+
 Class = Clone
 
 
