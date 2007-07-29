@@ -229,7 +229,6 @@ class Clone(callbacks.Plugin):
             else:
                 s += "Connecting"
             L.append(s)
-        utils.sortBy(ircutils.toLower, L)
         irc.reply(format('%L', L))
     status = wrap(status)
     
