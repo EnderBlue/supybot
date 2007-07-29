@@ -136,7 +136,6 @@ class Admin(callbacks.Plugin):
         networkGroup = conf.supybot.networks.get(irc.network)
         networkGroup.channels().add(channel)
         networkGroup.channels.clone.get(channel).setValue(irc.clone)
-        networkGroup.channels.allClones.get(channel).setValue(False)
         if key:
             networkGroup.channels.key.get(channel).setValue(key)
         if networkGroup.maxChannels():

@@ -53,11 +53,9 @@ class Clone(callbacks.Plugin):
         networkGroup = conf.supybot.networks.get(otherIrc.network)
         Owner = irc.getCallback('Owner')
         for i in range(num):
-            try:
-                Owner._connectClone(otherIrc.network, \
-                        networkGroup.numberOfClones())
-            except ValueError, e:
-                irc.error('Error adding clone %s: %s' % (clone, e))
+            if not Owner._connectClone(otherIrc.network, 
+                    networkGroup.numberOfClones()):
+                irc.replyError()
                 return
             networkGroup.numberOfClones.setValue( \
                     networkGroup.numberOfClones() + 1)
@@ -177,7 +175,6 @@ class Clone(callbacks.Plugin):
                       Raise=True)
         networkGroup.channels().add(channel)
         networkGroup.channels.clone.get(channel).setValue(chosenIrc.clone)
-        networkGroup.channels.allClones.get(channel).setValue(False)
         if key:
             networkGroup.channels.key.get(channel).setValue(key)
         chosenIrc.queueMsg(networkGroup.channels.join(channel))
