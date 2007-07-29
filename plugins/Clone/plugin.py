@@ -213,7 +213,26 @@ class Clone(callbacks.Plugin):
             i.queueMsg(ircmsgs.part(channel, reason or msg.nick))
         irc.noReply()
     part = wrap(part, [optional('validChannel'), additional('text')])
+    
+    def status(self, irc, msg, args):
+        """takes no arguments
 
+        Returns the status of each clone.
+        """
+        L = []
+        cloneIrcs = world.getIrcs(irc.network)
+        for i in cloneIrcs.values():
+            s = "%s: " % i.clone
+            if i.afterConnect:
+                s += utils.str.format("%n",
+                        (len(i.state.channels.keys()), 'channel'))
+            else:
+                s += "Connecting"
+            L.append(s)
+        utils.sortBy(ircutils.toLower, L)
+        irc.reply(format('%L', L))
+    status = wrap(status)
+    
 Class = Clone
 
 
