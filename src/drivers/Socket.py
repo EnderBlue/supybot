@@ -218,8 +218,10 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
 
     def die(self):
         self.zombie = True
-        if self.scheduled:
+        try:
             schedule.removeEvent(self.scheduled)
+        except KeyError:
+            pass
         drivers.log.die(self.irc)
 
     def _reallyDie(self):

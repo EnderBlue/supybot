@@ -153,26 +153,43 @@ class Clone(callbacks.Plugin):
         cloneIrcs = world.getIrcs(irc.network)
         Admin = irc.getCallback('Admin')
         chosenIrc = None
-        # FIXME: HACK: the Irc object runs into an infinite loop with 
-        # comparision to None. this is a quick fix, I'll look into why later
-        chosenIrcBool = False
-        for i in cloneIrcs.values():
+        # have we joined this channel in the past?
+        try:
+            clone = networkGroup.channels.clone.get(channel).value
+            i = cloneIrcs[clone]
             if networkGroup.maxChannels():
                 maxchannels = networkGroup.maxChannels()
             else:
                 maxchannels = i.state.supported.get('maxchannels',
                                 sys.maxint)
             if str(i.clone) not in networkGroup.protectedClones() \
-                    and len(i.state.channels) + 1 <= maxchannels \
-                    and (chosenIrcBool == False or 
-                    len(i.state.channels) < len(chosenIrc.state.channels)):
+                    and len(i.state.channels) + 1 <= maxchannels:
                 chosenIrc = i
-                chosenIrcBool = True
-        if chosenIrcBool == False:
-            irc.error("There isn't a clone with any space for joining. "
-                      "Either add more clones, free up some clones in the "
-                      "protectedClones setting or part some channels.",
-                      Raise=True)
+        except registry.NonExistentRegistryEntry:
+            pass
+        except KeyError:
+            pass
+        if not chosenIrc:
+            # FIXME: HACK: the Irc object runs into an infinite loop with 
+            # comparision to None. this is a quick fix, I'll look into why
+            # later
+            for i in cloneIrcs.values():
+                if networkGroup.maxChannels():
+                    maxchannels = networkGroup.maxChannels()
+                else:
+                    maxchannels = i.state.supported.get('maxchannels',
+                                    sys.maxint)
+                if str(i.clone) not in networkGroup.protectedClones() \
+                        and len(i.state.channels) + 1 <= maxchannels \
+                        and (not chosenIrc or 
+                        len(i.state.channels) < 
+                        len(chosenIrc.state.channels)):
+                    chosenIrc = i
+            if not chosenIrc:
+                irc.error("There isn't a clone with any space for joining. "
+                          "Either add more clones, free up some clones in "
+                          "the protectedClones setting or part some channels",
+                          Raise=True)
         networkGroup.channels().add(channel)
         networkGroup.channels.clone.get(channel).setValue(chosenIrc.clone)
         if key:

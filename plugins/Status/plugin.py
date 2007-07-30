@@ -206,6 +206,25 @@ class Status(callbacks.Plugin):
         irc.reply(irc.server)
     server = wrap(server)
 
+    def stats(self, irc, msg, args):
+        """takes no arguments
+
+        Prints some stats about the bot.
+        """
+        networks = []
+        channels = 0
+        users = 0
+        
+        for i in world.ircs:
+            if not networks.count(i.network):
+                networks.append(i.network)
+            channels += len(i.state.channels.keys())
+            for c in i.state.channels.values():
+                users += len(c.users)
+        irc.reply(utils.str.format('I am in %n on %n. I can see %n.',
+            (channels, 'channel'), (len(networks), 'network'), 
+            (users, 'user')))
+    stats = wrap(stats)
 
 Class = Status
 
