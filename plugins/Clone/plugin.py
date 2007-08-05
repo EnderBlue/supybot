@@ -198,7 +198,7 @@ class Clone(callbacks.Plugin):
         chosenIrc.queueMsg(networkGroup.channels.join(channel))
         irc.replySuccess("Initiated join for clone %s." % chosenIrc.clone)
         Admin.joins[channel] = (irc, msg)
-    join = wrap(join, ['validChannel', additional('something')])
+    join = wrap(join, ['admin', 'validChannel', additional('something')])
 
     def part(self, irc, msg, args, channel, reason):
         """[<channel>] [<reason>]
@@ -230,7 +230,7 @@ class Clone(callbacks.Plugin):
         for i in chosenIrcs:
             i.queueMsg(ircmsgs.part(channel, reason or msg.nick))
         irc.noReply()
-    part = wrap(part, [optional('validChannel'), additional('text')])
+    part = wrap(part, ['admin', optional('validChannel'), additional('text')])
     
     def status(self, irc, msg, args):
         """takes no arguments
@@ -248,7 +248,7 @@ class Clone(callbacks.Plugin):
                 s += "Connecting"
             L.append(s)
         irc.reply(format('%L', L))
-    status = wrap(status)
+    status = wrap(status, ['admin'])
     
 Class = Clone
 
