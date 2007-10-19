@@ -101,6 +101,7 @@ def remove(name):
 
 def run():
     """Runs the whole driver loop."""
+    global _deadDrivers
     for (name, driver) in _drivers.iteritems():
         try:
             if name not in _deadDrivers:
