@@ -117,9 +117,9 @@ def run():
             driver.irc = None
             log.info('Removing driver %s.', name)
             del _drivers[name]
-            _deadDrivers.remove(name)
         except KeyError:
             pass
+    _deadDrivers = []
     while _newDrivers:
         (name, driver) = _newDrivers.pop()
         log.debug('Adding new driver %s.', name)
