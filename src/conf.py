@@ -43,7 +43,7 @@ _pluginsDir = os.path.join(installDir, 'plugins')
 ###
 # version: This should be pretty obvious.
 ###
-version = '0.83.2+clones'
+version = '0.83.3+clones'
 
 ###
 # *** The following variables are affected by command-line options.  They are
@@ -816,6 +816,8 @@ class Databases(registry.SpaceSeparatedListOfStrings):
             v = ['anydbm', 'cdb', 'flat', 'pickle']
             if 'pysqlite2' in sys.modules or 'sqlite3' in sys.modules:
                 v.insert(0, 'sqlite')
+            if 'sqlalchemy' in sys.modules:
+                v.insert(0, 'sqlalchemy')
         return v
 
     def serialize(self):
@@ -825,6 +827,45 @@ registerGlobalValue(supybot, 'databases',
     Databases([], """Determines what databases are available for use. If this
     value is not configured (that is, if its value is empty) then sane defaults
     will be provided."""))
+
+class SqlalchemyDbs(registry.OnlySomeStrings):
+    validStrings = ('postgres', 'sqlite', 'mysql',
+                    'oracle', 'mssql', 'firebird')
+    def connection(self):
+        sa = supybot.databases.sqlalchemy
+        s = '%s://' % self()
+        user = sa.user()
+        pw = sa.password()
+        if user and pw:
+            s = '%s%s:%s@' % (s, user, pw)
+        elif user:
+            s = '%s%s@' % (s, user)
+        host = sa.host()
+        port = sa.port()
+        if host and port:
+            s = '%s%s:%s' % (s, host, port)
+        elif host:
+            s = '%s%s' % (s, host)
+        s = '%s/' % s
+        return s
+
+registerGroup(supybot.databases, 'sqlalchemy')
+registerGlobalValue(supybot.databases.sqlalchemy, 'engine',
+    SqlalchemyDbs('sqlite', """Determines which database engine SQLAlchemy will
+    use for the databases it creates."""))
+registerGlobalValue(supybot.databases.sqlalchemy, 'user',
+    registry.String('', """Determines which user, if any, will be used when
+    connecting to the database via SQLAlchemy.""", private=True))
+registerGlobalValue(supybot.databases.sqlalchemy, 'password',
+    registry.String('', """Determines what password, if any, will be used when
+    connecting to the database via SQLAlchemy.""", private=True))
+registerGlobalValue(supybot.databases.sqlalchemy, 'host',
+    registry.String('', """Determines which host, if any, will be used when
+    connecting to the database via SQLAlchemy."""))
+registerGlobalValue(supybot.databases.sqlalchemy, 'port',
+    registry.NonNegativeInteger(0, """Determines which port, if any, will be
+    used when connecting to the database via SQLAlchemy."""))
+
 
 registerGroup(supybot.databases, 'users')
 registerGlobalValue(supybot.databases.users, 'filename',

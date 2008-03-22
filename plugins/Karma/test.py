@@ -29,9 +29,11 @@
 
 from supybot.test import *
 
+import supybot.plugins as plugins
+
 try:
-    import sqlite
-except ImportError:
+    sqlite = plugins.importSqlite()
+except:
     sqlite = None
 
 if sqlite is not None:

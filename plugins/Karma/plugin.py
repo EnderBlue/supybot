@@ -30,6 +30,7 @@
 import os
 import csv
 
+import supybot.dbi as dbi
 import supybot.conf as conf
 import supybot.utils as utils
 from supybot.commands import *
@@ -48,20 +49,21 @@ class SqliteKarmaDB(object):
             db.close()
 
     def _getDb(self, channel):
-        try:
-            import sqlite
-        except ImportError:
-            raise callbacks.Error, 'You need to have PySQLite installed to ' \
-                                   'use Karma.  Download it at ' \
-                                   '<http://pysqlite.org/>'
+        sqlite = plugins.importSqlite()
         filename = plugins.makeChannelFilename(self.filename, channel)
+        def p(s1, s2):
+            return int(ircutils.nickEqual(s1.encode('iso8859-1'),
+                                          s2.encode('iso8859-1')))
         if filename in self.dbs:
+            self.dbs[filename].create_function('nickeq', 2, p)
             return self.dbs[filename]
         if os.path.exists(filename):
             self.dbs[filename] = sqlite.connect(filename)
+            self.dbs[filename].create_function('nickeq', 2, p)
             return self.dbs[filename]
         db = sqlite.connect(filename)
         self.dbs[filename] = db
+        self.dbs[filename].create_function('nickeq', 2, p)
         cursor = db.cursor()
         cursor.execute("""CREATE TABLE karma (
                           id INTEGER PRIMARY KEY,
@@ -71,9 +73,6 @@ class SqliteKarmaDB(object):
                           subtracted INTEGER
                           )""")
         db.commit()
-        def p(s1, s2):
-            return int(ircutils.nickEqual(s1, s2))
-        db.create_function('nickeq', 2, p)
         return db
 
     def get(self, channel, thing):
@@ -81,20 +80,21 @@ class SqliteKarmaDB(object):
         thing = thing.lower()
         cursor = db.cursor()
         cursor.execute("""SELECT added, subtracted FROM karma
-                          WHERE normalized=%s""", thing)
-        if cursor.rowcount == 0:
-            return None
+                          WHERE normalized=?""", (thing,))
+        result = cursor.fetchone()
+        if result:
+            return map(int, result)
         else:
-            return map(int, cursor.fetchone())
+            raise dbi.NoRecordError
 
     def gets(self, channel, things):
         db = self._getDb(channel)
         cursor = db.cursor()
         normalizedThings = dict(zip(map(str.lower, things), things))
-        criteria = ' OR '.join(['normalized=%s'] * len(normalizedThings))
+        criteria = ' OR '.join(['normalized=?'] * len(normalizedThings))
         sql = """SELECT name, added-subtracted FROM karma
                  WHERE %s ORDER BY added-subtracted DESC""" % criteria
-        cursor.execute(sql, *normalizedThings)
+        cursor.execute(sql, tuple(normalizedThings.keys()))
         L = [(name, int(karma)) for (name, karma) in cursor.fetchall()]
         for (name, _) in L:
             del normalizedThings[name.lower()]
@@ -106,26 +106,27 @@ class SqliteKarmaDB(object):
         db = self._getDb(channel)
         cursor = db.cursor()
         cursor.execute("""SELECT name, added-subtracted FROM karma
-                          ORDER BY added-subtracted DESC LIMIT %s""", limit)
+                          ORDER BY added-subtracted DESC LIMIT ?""", (limit,))
         return [(t[0], int(t[1])) for t in cursor.fetchall()]
 
     def bottom(self, channel, limit):
         db = self._getDb(channel)
         cursor = db.cursor()
         cursor.execute("""SELECT name, added-subtracted FROM karma
-                          ORDER BY added-subtracted ASC LIMIT %s""", limit)
+                          ORDER BY added-subtracted ASC LIMIT ?""", (limit,))
         return [(t[0], int(t[1])) for t in cursor.fetchall()]
 
     def rank(self, channel, thing):
         db = self._getDb(channel)
         cursor = db.cursor()
         cursor.execute("""SELECT added-subtracted FROM karma
-                          WHERE name=%s""", thing)
-        if cursor.rowcount == 0:
-            return None
-        karma = int(cursor.fetchone()[0])
+                          WHERE name=?""", (thing,))
+        result = cursor.fetchone()
+        if not result:
+            raise dbi.NoRecordError
+        karma = int(result[0])
         cursor.execute("""SELECT COUNT(*) FROM karma
-                          WHERE added-subtracted > %s""", karma)
+                          WHERE added-subtracted > ?""", (karma,))
         rank = int(cursor.fetchone()[0])
         return rank+1
 
@@ -139,20 +140,20 @@ class SqliteKarmaDB(object):
         db = self._getDb(channel)
         cursor = db.cursor()
         normalized = name.lower()
-        cursor.execute("""INSERT INTO karma VALUES (NULL, %s, %s, 0, 0)""",
-                       name, normalized)
+        cursor.execute("""INSERT INTO karma VALUES (NULL, ?, ?, 0, 0)""",
+                       (name, normalized))
         cursor.execute("""UPDATE karma SET added=added+1
-                          WHERE normalized=%s""", normalized)
+                          WHERE normalized=?""", (normalized,))
         db.commit()
 
     def decrement(self, channel, name):
         db = self._getDb(channel)
         cursor = db.cursor()
         normalized = name.lower()
-        cursor.execute("""INSERT INTO karma VALUES (NULL, %s, %s, 0, 0)""",
-                       name, normalized)
+        cursor.execute("""INSERT INTO karma VALUES (NULL, ?, ?, 0, 0)""",
+                       (name, normalized))
         cursor.execute("""UPDATE karma SET subtracted=subtracted+1
-                          WHERE normalized=%s""", normalized)
+                          WHERE normalized=?""", (normalized,))
         db.commit()
 
     def most(self, channel, kind, limit):
@@ -176,7 +177,7 @@ class SqliteKarmaDB(object):
         cursor = db.cursor()
         normalized = name.lower()
         cursor.execute("""UPDATE karma SET subtracted=0, added=0
-                          WHERE normalized=%s""", normalized)
+                          WHERE normalized=?""", (normalized,))
         db.commit()
 
     def dump(self, channel, filename):
@@ -200,8 +201,8 @@ class SqliteKarmaDB(object):
         for (name, added, subtracted) in reader:
             normalized = name.lower()
             cursor.execute("""INSERT INTO karma
-                              VALUES (NULL, %s, %s, %s, %s)""",
-                           name, normalized, added, subtracted)
+                              VALUES (NULL, ?, ?, ?, ?)""",
+                           (name, normalized, added, subtracted))
         db.commit()
         fd.close()
 
@@ -282,20 +283,21 @@ class Karma(callbacks.Plugin):
         """
         if len(things) == 1:
             name = things[0]
-            t = self.db.get(channel, name)
-            if t is None:
+            try:
+                t = self.db.get(channel, name)
+            except dbi.NoRecordError:
                 irc.reply(format('%s has neutral karma.', name))
+                return
+            (added, subtracted) = t
+            total = added - subtracted
+            if self.registryValue('simpleOutput', channel):
+                s = format('%s: %i', name, total)
             else:
-                (added, subtracted) = t
-                total = added - subtracted
-                if self.registryValue('simpleOutput', channel):
-                    s = format('%s: %i', name, total)
-                else:
-                    s = format('Karma for %q has been increased %n and '
-                               'decreased %n for a total karma of %s.',
-                               name, (added, 'time'), (subtracted, 'time'),
-                               total)
-                irc.reply(s)
+                s = format('Karma for %q has been increased %n and '
+                           'decreased %n for a total karma of %s.',
+                           name, (added, 'time'), (subtracted, 'time'),
+                           total)
+            irc.reply(s)
         elif len(things) > 1:
             (L, neutrals) = self.db.gets(channel, things)
             if L:
@@ -317,12 +319,12 @@ class Karma(callbacks.Plugin):
             if not (highest and lowest):
                 irc.error('I have no karma for this channel.')
                 return
-            rank = self.db.rank(channel, msg.nick)
-            if rank is not None:
+            try:
+                rank = self.db.rank(channel, msg.nick)
                 total = self.db.size(channel)
                 rankS = format('  You (%s) are ranked %i out of %i.',
                                msg.nick, rank, total)
-            else:
+            except dbi.NoRecordError:
                 rankS = ''
             s = format('Highest karma: %L.  Lowest karma: %L.%s',
                        highest, lowest, rankS)

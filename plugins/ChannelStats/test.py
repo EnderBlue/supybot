@@ -75,6 +75,18 @@ class ChannelStatsTestCase(ChannelPluginTestCase):
     def testNoKeyErrorStats(self):
         self.assertNotRegexp('stats sweede', 'KeyError')
 
+    def testRank(self):
+        self.assertError('channelstats stats %s' % self.irc.nick)
+        self.assertNotError('channelstats stats %s' % self.irc.nick)
+        self.assertNotError('channelstats stats %s' % self.irc.nick)
+        self.assertNotError('channelstats stats %s' % self.irc.nick.upper())
+        self.assertNotError('channelstats stats %s' % self.nick)
+        self.assertNotError('channelstats stats %s' % self.nick.upper())
+        self.assertNotError('channelstats stats')
+        self.assertNotError('channelstats rank chars / msgs')
+        self.assertNotError('channelstats rank kicks/kicked') # Tests inf
+        self.assertNotError('channelstats rank log(msgs)')
+
 
 # vim:set shiftwidth=4 softtabstop=4 expandtab textwidth=79:
 

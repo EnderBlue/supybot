@@ -204,6 +204,7 @@ _stdoutHandler = StdoutStreamHandler(sys.stdout)
 
 class ValidLogLevel(registry.String):
     """Invalid log level."""
+    handler = None
     minimumLevel = -1
     def set(self, s):
         s = s.upper()
@@ -216,6 +217,8 @@ class ValidLogLevel(registry.String):
                 self.error()
         if level < self.minimumLevel:
             self.error()
+        if self.handler is not None:
+            self.handler.setLevel(level)
         self.setValue(level)
 
     def __str__(self):
@@ -229,16 +232,12 @@ class ValidLogLevel(registry.String):
 class LogLevel(ValidLogLevel):
     """Invalid log level.  Value must be either DEBUG, INFO, WARNING,
     ERROR, or CRITICAL."""
-    def setValue(self, v):
-        ValidLogLevel.setValue(self, v)
-        _handler.setLevel(self.value)
+    handler = _handler
 
 class StdoutLogLevel(ValidLogLevel):
     """Invalid log level.  Value must be either DEBUG, INFO, WARNING,
     ERROR, or CRITICAL."""
-    def setValue(self, v):
-        ValidLogLevel.setValue(self, v)
-        _stdoutHandler.setLevel(self.value)
+    handler = _stdoutHandler
 
 conf.registerGroup(conf.supybot, 'log')
 conf.registerGlobalValue(conf.supybot.log, 'format',
@@ -248,8 +247,10 @@ conf.registerGlobalValue(conf.supybot.log, 'format',
     its logging module."""))
 conf.registerGlobalValue(conf.supybot.log, 'level',
     LogLevel(logging.INFO, """Determines what the minimum priority level logged
-    will be.  Valid values are DEBUG, INFO, WARNING, ERROR,
-    and CRITICAL, in order of increasing priority."""))
+    to file will be.  Do note that this value does not affect the level logged
+    to stdout; for that, you should set the value of supybot.log.stdout.level.
+    Valid values are DEBUG, INFO, WARNING, ERROR, and CRITICAL, in order of
+    increasing priority."""))
 conf.registerGlobalValue(conf.supybot.log, 'timestampFormat',
     registry.String('%Y-%m-%dT%H:%M:%S', """Determines the format string for
     timestamps in logfiles.  Refer to the Python documentation for the time

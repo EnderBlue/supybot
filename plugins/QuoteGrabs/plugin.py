@@ -66,18 +66,7 @@ class SqliteQuoteGrabsDB(object):
             db.close()
 
     def _getDb(self, channel):
-        try:
-            from pysqlite2 import dbapi2 as sqlite
-            sqlite.enable_callback_tracebacks(1)
-        except ImportError:
-            try:
-                import sqlite3 as sqlite
-                sqlite.enable_callback_tracebacks(1)
-            except ImportError:
-                raise callbacks.Error, \
-                        'You need to have PySQLite2 or Python2.5 installed ' \
-                        'to use this plugin.  Download PySQLite2 at ' \
-                        '<http://initd.org/tracker/pysqlite/wiki/pysqlite>'
+        sqlite = plugins.importSqlite()
         filename = plugins.makeChannelFilename(self.filename, channel)
         def p(s1, s2):
             return int(ircutils.nickEqual(s1.encode('iso8859-1'),

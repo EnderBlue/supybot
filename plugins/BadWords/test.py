@@ -29,20 +29,46 @@
 
 from supybot.test import *
 
-class LaterTestCase(PluginTestCase):
-    plugins = ('Later',)
-    def testLaterWorksTwice(self):
-        self.assertNotError('later tell foo bar')
-        self.assertNotError('later tell foo baz')
+class BadWordsTestCase(PluginTestCase):
+    plugins = ('BadWords', 'Utilities', 'Format')
+    badwords = ('shit', 'ass')
+    def tearDown(self):
+        # .default() doesn't seem to be working for BadWords.words
+        #default = conf.supybot.plugins.BadWords.words.default()
+        #conf.supybot.plugins.BadWords.words.setValue(default)
+        conf.supybot.plugins.BadWords.words.setValue([])
 
-    def testLaterRemove(self):
-        self.assertNotError('later tell foo 1')
-        self.assertNotError('later tell bar 1')
-        self.assertRegexp('later notes', 'bar.*foo')
-        self.assertNotError('later remove bar')
-        self.assertNotRegexp('later notes', 'bar.*foo')
-        self.assertRegexp('later notes', 'foo')
+    def _test(self):
+        for word in self.badwords:
+            self.assertRegexp('echo %s' % word, '(?!%s)' % word)
+            self.assertRegexp('echo [colorize %s]' % word, '(?!%s)' % word)
+            self.assertRegexp('echo foo%sbar' % word, '(?!%s)' % word)
+            self.assertRegexp('echo [format join "" %s]' % ' '.join(word),
+                              '(?!%s)' % word)
 
+    def _NegTest(self):
+        for word in self.badwords:
+            self.assertRegexp('echo %s' % word, word)
+            self.assertRegexp('echo foo%sbar' % word, word)
+            self.assertRegexp('echo [format join "" %s]' % ' '.join(word),word)
+
+    def testAddbadwords(self):
+        self.assertNotError('badwords add %s' % ' '.join(self.badwords))
+        self._test()
+
+    def testDefault(self):
+        self._NegTest()
+
+    def testRemovebadwords(self):
+        self.assertNotError('badwords add %s' % ' '.join(self.badwords))
+        self.assertNotError('badwords remove %s' % ' '.join(self.badwords))
+        self._NegTest()
+
+    def testList(self):
+        self.assertNotError('badwords list')
+        self.assertNotError('badwords add shit')
+        self.assertNotError('badwords add ass')
+        self.assertResponse('badwords list', 'ass and shit')
 
 # vim:set shiftwidth=4 softtabstop=4 expandtab textwidth=79:
 

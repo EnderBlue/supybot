@@ -58,8 +58,12 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
         self.zombie = False
         self.scheduled = None
         self.connected = False
+        
         self.resetDelay()
         self.scheduledResetDelay = None
+        self.nextReconnectTime = None
+        self.lastReconnectReason = None
+        
         # Only connect to non-SSL servers
         if self.networkGroup.get('ssl').value:
             drivers.log.error('The Socket driver can not connect to SSL '
@@ -68,13 +72,14 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
             self.connect()
 
     def getDelay(self):
-        ret = self.currentDelay
         self.currentDelay = min(self.currentDelay * 2,
                                 conf.supybot.drivers.maxReconnectWait())
-        return ret
+        return self.currentDelay
 
     def resetDelay(self):
         self.currentDelay = 10.0
+        self.nextReconnectTime = None
+        self.lastReconnectReason = None
 
     def _getNextServer(self):
         oldServer = getattr(self, 'currentServer', None)
@@ -205,6 +210,8 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
                               'this to happen.')
             schedule.removeEvent(self.scheduled)
         self.scheduled = schedule.addEvent(self.reconnect, when)
+        
+        self.nextReconnectTime = when
         
         # After so self.getDelay() can update self.currentDelay
         try:

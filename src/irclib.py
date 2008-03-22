@@ -611,6 +611,7 @@ class Irc(IrcCommandDispatcher):
         self._setNonResettingVariables()
         self._queueConnectMessages()
         self.startedSync = ircutils.IrcDict()
+        self.lastReconnectError = None
 
     def isChannel(self, s):
         """Helper function to check whether a given string is a channel on
@@ -956,10 +957,12 @@ class Irc(IrcCommandDispatcher):
         """Handles ERROR messages."""
         log.info('Error message from %s: %s', self.network, msg.args[0])
         if not self.zombie:
-           if msg.args[0].startswith('Closing Link'):
-              self.driver.reconnect()
-           elif 'too fast' in msg.args[0]: # Connecting too fast.
-              self.driver.reconnect(wait=True)
+            if hasattr(self.driver, "lastReconnectReason"):
+                self.driver.lastReconnectReason = msg.args[0]
+            if msg.args[0].startswith('Closing Link'):
+                self.driver.reconnect()
+            elif 'too fast' in msg.args[0]: # Connecting too fast.
+                self.driver.reconnect(wait=True)
 
     def doNick(self, msg):
         """Handles NICK messages."""

@@ -250,6 +250,8 @@ class ChannelLogger(callbacks.Plugin):
     def doQuit(self, irc, msg):
         if not isinstance(irc, irclib.Irc):
             irc = irc.getRealIrc()
+        if irc not in self.lastStates:
+            return
         for (channel, chan) in self.lastStates[irc].channels.iteritems():
             if msg.nick in chan.users:
                 self.doLog(irc, channel, '*** %s has quit IRC\n', msg.nick)

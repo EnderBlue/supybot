@@ -28,6 +28,8 @@
 
 ###
 
+import time
+
 import supybot.conf as conf
 import supybot.ircdb as ircdb
 import supybot.utils as utils
@@ -142,12 +144,7 @@ class Clone(callbacks.Plugin):
         irc.noReply()
     announce = wrap(announce, ['owner', 'text'])
     
-    def join(self, irc, msg, args, channel, key):
-        """<channel> [<key>]
-        
-        Finds the clone with the fewest channels (taking into account 
-        configured protected clones) and tells it to join the given channel.
-        If <key> is given, it is used when attempting to join the channel."""
+    def _join(self, irc, msg, args, channel, key):
         if not irc.isChannel(channel):
             irc.errorInvalid('channel', channel, Raise=True)
         networkGroup = conf.supybot.networks.get(irc.network)
@@ -198,16 +195,18 @@ class Clone(callbacks.Plugin):
         chosenIrc.queueMsg(networkGroup.channels.join(channel))
         irc.replySuccess("Initiated join for clone %s." % chosenIrc.clone)
         Admin.joins[channel] = (irc, msg)
+        
+    def join(self, irc, msg, args, channel, key):
+        """<channel> [<key>]
+        
+        Finds the clone with the fewest channels (taking into account 
+        configured protected clones) and tells it to join the given channel.
+        If <key> is given, it is used when attempting to join the channel."""
+        return self._join(irc, msg, args, channel, key)
+        
     join = wrap(join, ['admin', 'validChannel', additional('something')])
-
-    def part(self, irc, msg, args, channel, reason):
-        """[<channel>] [<reason>]
-
-        Finds the clone that is in <channel> and tells is to part it  
-        <channel> is only necessary if you want the bot to part a channel 
-        other than the current channel.  If <reason> is specified, use it as 
-        the part message.
-        """
+    
+    def _part(self, irc, msg, args, channel, reason):
         chosenIrcs = []
         if channel is None:
             if irc.isChannel(msg.args[0]):
@@ -230,6 +229,17 @@ class Clone(callbacks.Plugin):
         for i in chosenIrcs:
             i.queueMsg(ircmsgs.part(channel, reason or msg.nick))
         irc.noReply()
+        
+    def part(self, irc, msg, args, channel, reason):
+        """[<channel>] [<reason>]
+
+        Finds the clone that is in <channel> and tells is to part it  
+        <channel> is only necessary if you want the bot to part a channel 
+        other than the current channel.  If <reason> is specified, use it as 
+        the part message.
+        """
+        return self._part(irc, msg, args, channel, reason)
+        
     part = wrap(part, ['admin', optional('validChannel'), additional('text')])
     
     def status(self, irc, msg, args):
@@ -243,9 +253,21 @@ class Clone(callbacks.Plugin):
             s = "%s: " % i.clone
             if i.afterConnect:
                 s += utils.str.format("%n",
-                        (len(i.state.channels.keys()), 'channel'))
+                        (len(i.state.channels.keys()), 'chan'))
+            elif not i.driver:
+                s += "No driver"
+            elif i.driver.connected:
+                s += "Connecting..."
+            elif hasattr(i.driver, "nextReconnectTime") \
+                    and i.driver.nextReconnectTime:
+                s += "%ss to next reconnect" \
+                        % int(i.driver.nextReconnectTime - time.time())
+                if hasattr(i.driver, "lastReconnectReason"):
+                    s += " (%s)" % i.driver.lastReconnectReason
             else:
-                s += "Connecting"
+                s += "Not connected"
+                if hasattr(i.driver, "lastReconnectReason"):
+                    s += " (%s)" % i.driver.lastReconnectReason
             L.append(s)
         irc.reply(format('%L', L))
     status = wrap(status, ['admin'])

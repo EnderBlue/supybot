@@ -51,47 +51,6 @@ from supybot.commands import *
 import supybot.ircutils as ircutils
 import supybot.callbacks as callbacks
 
-try:
-    # We need to sweep away all that mx.* crap because our code doesn't account
-    # for PySQLite's arbitrary use of it.  Whoever decided to change sqlite's
-    # behavior based on whether or not that module is installed was a *CRACK*
-    # **FIEND**, plain and simple.
-    mxCrap = {}
-    for (name, module) in sys.modules.items():
-        if name.startswith('mx'):
-            mxCrap[name] = module
-            sys.modules.pop(name)
-    # Now that the mx crap is gone, we can import sqlite.
-    import sqlite
-    # And now we'll put it back, even though it sucks.
-    sys.modules.update(mxCrap)
-    # Just in case, we'll do this as well.  It doesn't seem to work fine by
-    # itself, though, or else we'd just do this in the first place.
-    sqlite.have_datetime = False
-    Connection = sqlite.Connection
-    class MyConnection(sqlite.Connection):
-        def commit(self, *args, **kwargs):
-            if self.autocommit:
-                return
-            else:
-                Connection.commit(self, *args, **kwargs)
-
-        def __del__(self):
-            try:
-                Connection.__del__(self)
-            except AttributeError:
-                pass
-            except Exception, e:
-                try:
-                    log.exception('Uncaught exception in __del__:')
-                except:
-                    pass
-    sqlite.Connection = MyConnection
-    #del Connection.__del__
-except ImportError:
-    pass
-
-
 class NoSuitableDatabase(Exception):
     def __init__(self, suitable):
         self.suitable = suitable
@@ -110,11 +69,21 @@ def DB(filename, types):
         for type in conf.supybot.databases():
             # Can't do this because Python sucks.  Go ahead, try it!
             # filename = '.'.join([filename, type, 'db'])
-            fn = '.'.join([filename, type, 'db'])
-            try:
-                return types[type](fn, *args, **kwargs)
-            except KeyError:
-                continue
+            if type == 'sqlalchemy':
+                sa = conf.supybot.databases.sqlalchemy
+                engine = sa.engine()
+                s = sa.engine.connection()
+                fn = '.'.join([filename, type, engine, 'db'])
+                try:
+                    return types[type](fn, s, *args, **kwargs)
+                except KeyError:
+                    continue
+            else:
+                fn = '.'.join([filename, type, 'db'])
+                try:
+                    return types[type](fn, *args, **kwargs)
+                except KeyError:
+                    continue
         raise NoSuitableDatabase, types.keys()
     return MakeDB
 
@@ -134,6 +103,20 @@ def getChannel(channel):
     assert channel is not None, 'Death to those who use None for their channel'
     channelSpecific = conf.supybot.databases.plugins.channelSpecific
     return channelSpecific.getChannelLink(channel)
+
+def importSqlite():
+    try:
+        from pysqlite2 import dbapi2 as sqlite
+        return sqlite
+    except ImportError:
+        try:
+            import sqlite3 as sqlite
+            return sqlite
+        except ImportError:
+            raise callbacks.Error, \
+                    'You need to have PySQLite2 or Python2.5 installed ' \
+                    'to use this plugin.  Download PySQLite2 at ' \
+                    '<http://initd.org/tracker/pysqlite/wiki/pysqlite>'
 
 # XXX This shouldn't be a mixin.  This should be contained by classes that
 #     want such behavior.  But at this point, it wouldn't gain much for us
@@ -593,7 +576,9 @@ class PeriodicFileDownloader(object):
             t.start()
             world.threadsSpawned += 1
 
-
-
+try:
+    sqlite = importSqlite()
+except:
+    pass
 
 # vim:set shiftwidth=4 softtabstop=4 expandtab textwidth=79:
