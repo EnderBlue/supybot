@@ -529,6 +529,9 @@ class IrcState(IrcCommandDispatcher):
                 del self.channels[channel]
             else:
                 chan.removeUser(msg.nick)
+                if conf.supybot.networks.get(irc.network).partEmptyChannels()\
+                     and len(chan.users) == 1:
+                    irc.queueMsg(ircmsgs.part(channel, "Empty channel"))
 
     def doKick(self, irc, msg):
         (channel, users) = msg.args[:2]

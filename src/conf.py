@@ -277,6 +277,10 @@ def registerNetwork(name, password='', ssl=False):
     registerGlobalValue(network, 'ssl', registry.Boolean(ssl,
         """Determines whether the bot will attempt to connect with SSL sockets
         to %s.""" % name))
+    registerGlobalValue(network, 'partEmptyChannels',
+        registry.Boolean(False, """Determines whether the bot will part a 
+        channel automatically if it is the only user left. Useful if there
+        is an existing ChanServ service on this channel."""))
     registerGlobalValue(network, 'maxChannels', registry.Integer(0,
         """Override the maximum channels reported by the server. Set to 
         0 to use value reported by server. Also used for maximum number of
@@ -660,12 +664,19 @@ registerGlobalValue(supybot.commands.defaultPlugins, 'importantPlugins',
 # supybot.abuse.  For stuff relating to abuse of the bot.
 ###
 registerGroup(supybot, 'abuse')
-registerGlobalValue(supybot.abuse, 'ignorePattern',
+registerGroup(supybot.abuse, 'ignorePattern')
+registerGlobalValue(supybot.abuse.ignorePattern, 'incoming',
     registry.String('', """Determines the regex pattern that, if matched, will
-    cause a message in a channel or PM to be completely ignored. Regex is case 
-    insensitive. Leave blank to disable. Handy for stopping IRC viruses or 
-    normal messages that might be picked up as a command ("=]" when the prefix 
-    is "=" for example)."""))
+    cause an incoming message in a channel or PM to be completely ignored. 
+    Regex is case insensitive. Leave blank to disable. Handy for stopping IRC 
+    viruses or normal messages that might be picked up as a command ("=]" when 
+    the prefix is "=" for example)."""))
+    
+registerGlobalValue(supybot.abuse.ignorePattern, 'outgoing',
+    registry.String('', """Determines the regex pattern that, if matched, will
+    cause an outgoing message in a channel or PM to be completely ignored. 
+    Regex is case insensitive. Leave blank to disable. Handy for stopping IRC 
+    viruses."""))
 
 registerGroup(supybot.abuse, 'flood')
 registerGlobalValue(supybot.abuse.flood, 'command',

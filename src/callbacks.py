@@ -826,6 +826,14 @@ class NestedCommandsIrcProxy(ReplyIrcProxy):
         self.noLengthCheck=noLengthCheck or self.noLengthCheck or self.action
         target = self.private and self.to or self.msg.args[0]
         s = str(s) # Allow non-string esses.
+        if conf.supybot.abuse.ignorePattern.outgoing():
+            r = re.compile(conf.supybot.abuse.ignorePattern.outgoing(),
+                            re.I)
+            if r.search(msg.args[1]):
+                log.info("Not sending message due to outgoing "
+                          "ignorePattern")
+                self._resetReplyAttributes()
+                return
         if self.finalEvaled:
             try:
                 if isinstance(self.irc, self.__class__):
@@ -1228,9 +1236,12 @@ class PluginMixin(BasePlugin, irclib.IrcCallback):
                     and networkGroup.channels.clone.get(msg.args[0]).value \
                     != irc.clone:
                 ignore = True
-            elif conf.supybot.abuse.ignorePattern():
-                r = re.compile(conf.supybot.abuse.ignorePattern(), re.I)
+            elif conf.supybot.abuse.ignorePattern.incoming():
+                r = re.compile(conf.supybot.abuse.ignorePattern.incoming(),
+                                re.I)
                 if r.search(msg.args[1]):
+                    log.debug("Ignoring message due to incoming "
+                              "ignorePattern")
                     ignore = True
             if not ignore and (self.noIgnore
                     or not ircdb.checkIgnored(msg.prefix,msg.args[0])):

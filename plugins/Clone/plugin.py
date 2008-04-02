@@ -177,7 +177,8 @@ class Clone(callbacks.Plugin):
                 else:
                     maxchannels = i.state.supported.get('maxchannels',
                                     sys.maxint)
-                if str(i.clone) not in networkGroup.protectedClones() \
+                if i.afterConnect and str(i.clone) \
+                                       not in networkGroup.protectedClones() \
                         and len(i.state.channels) + 1 <= maxchannels \
                         and (not chosenIrc or 
                         len(i.state.channels) < 

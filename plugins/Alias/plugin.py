@@ -304,7 +304,7 @@ class Alias(callbacks.Plugin):
             irc.replySuccess()
         except AliasError, e:
             irc.error(str(e))
-    add = wrap(add, ['commandName', 'text'])
+    add = wrap(add, ['admin', 'commandName', 'text'])
 
     def remove(self, irc, msg, args, name):
         """<name>
@@ -317,7 +317,7 @@ class Alias(callbacks.Plugin):
             irc.replySuccess()
         except AliasError, e:
             irc.error(str(e))
-    remove = wrap(remove, ['commandName'])
+    remove = wrap(remove, ['admin', 'commandName'])
 
 
 Class = Alias
