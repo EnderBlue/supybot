@@ -91,22 +91,32 @@ class Herald(callbacks.Plugin):
         if self.registryValue('heralding', channel):
             try:
                 id = ircdb.users.getUserId(msg.prefix)
+                heraldAll = self.db['#ALL', id]
+            except KeyError:
+                heraldAll = ""
+            
+            try:
+                id = ircdb.users.getUserId(msg.prefix)
                 if id in self.splitters:
                     self.log.debug('Not heralding id #%s, recent split.', id)
                     return
                 herald = self.db[channel, id]
             except KeyError:
-                default = self.registryValue('default', channel)
-                if default:
-                    default = ircutils.standardSubstitute(irc, msg, default)
-                    msgmaker = ircmsgs.privmsg
-                    if self.registryValue('default.notice', channel):
-                        msgmaker = ircmsgs.notice
-                    target = msg.nick
-                    if self.registryValue('default.public', channel):
-                        target = channel
-                    irc.queueMsg(msgmaker(target, default))
-                return
+                if heraldAll == "":
+                    default = self.registryValue('default', channel)
+                    if default:
+                        default = ircutils.standardSubstitute(irc, msg, default)
+                        msgmaker = ircmsgs.privmsg
+                        if self.registryValue('default.notice', channel):
+                            msgmaker = ircmsgs.notice
+                        target = msg.nick
+                        if self.registryValue('default.public', channel):
+                            target = channel
+                        irc.queueMsg(msgmaker(target, default))
+                    return
+                else:
+                    herald = heraldAll
+                    
             now = time.time()
             throttle = self.registryValue('throttle', channel)
             if now - self.lastHerald.get((channel, id), 0) > throttle:

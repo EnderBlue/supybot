@@ -25,6 +25,7 @@
 # CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
+
 ###
 
 import supybot.conf as conf
@@ -40,6 +41,13 @@ def configure(advanced):
 
 
 Games = conf.registerPlugin('Games')
+# This is where your configuration variables (if any) should go.  For example:
+# conf.registerGlobalValue(Games, 'someConfigVariableName',
+#     registry.Boolean(False, """Help for someConfigVariableName."""))
+conf.registerChannelValue(Games, 'exclusions',
+        registry.SpaceSeparatedListOfStrings([], 
+        """A list of nicks who should be excluded from being 
+            targeted"""))
 
 
 # vim:set shiftwidth=4 softtabstop=4 expandtab textwidth=79:

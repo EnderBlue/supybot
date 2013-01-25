@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2002-2004, Jeremiah Fincher
-# Copyright (c) 2009-2010, James McCoy
+# Copyright (c) 2009, James Vega
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,6 @@
 ###
 
 import re
-import json
 
 import supybot.conf as conf
 import supybot.utils as utils
@@ -41,30 +40,38 @@ import supybot.callbacks as callbacks
 
 class CdbShrunkenUrlDB(object):
     def __init__(self, filename):
-        self.dbs = {}
-        cdb = conf.supybot.databases.types.cdb
-        for service in conf.supybot.plugins.ShrinkUrl.default.validStrings:
-            dbname = filename.replace('.db', service.capitalize() + '.db')
-            self.dbs[service] = cdb.connect(dbname)
+        self.tinyDb = conf.supybot.databases.types.cdb.connect(
+            filename.replace('.db', '.Tiny.db'))
+        self.lnDb = conf.supybot.databases.types.cdb.connect(
+            filename.replace('.db', '.Ln.db'))
 
-    def get(self, service, url):
-        return self.dbs[service][url]
+    def getTiny(self, url):
+        return self.tinyDb[url]
 
-    def set(self, service, url, shrunkurl):
-        self.dbs[service][url] = shrunkurl
+    def setTiny(self, url, tinyurl):
+        self.tinyDb[url] = tinyurl
+
+    def getLn(self, url):
+        return self.lnDb[url]
+
+    def setLn(self, url, lnurl):
+        self.lnDb[url] = lnurl
 
     def close(self):
-        for service in self.dbs:
-            self.dbs[service].close()
+        self.tinyDb.close()
+        self.lnDb.close()
 
     def flush(self):
-        for service in self.dbs:
-            self.dbs[service].flush()
+        self.tinyDb.flush()
+        self.lnDb.flush()
+        
+    def getLnSize(self):
+        return self.lnDb.__len__()
+        
+    def getTinySize(self):
+        return self.tinyDb.__len__()
 
 ShrunkenUrlDB = plugins.DB('ShrinkUrl', {'cdb': CdbShrunkenUrlDB})
-
-class ShrinkError(Exception):
-    pass
 
 class ShrinkUrl(callbacks.PluginRegexp):
     regexps = ['shrinkSnarfer']
@@ -87,16 +94,14 @@ class ShrinkUrl(callbacks.PluginRegexp):
         for m in utils.web.httpUrlRe.finditer(text):
             url = m.group(1)
             if len(url) > self.registryValue('minimumLength', channel):
+                cmd = self.registryValue('default', channel)
                 try:
-                    cmd = self.registryValue('serviceRotation',
-                                             channel, value=False)
-                    cmd = cmd.getService().capitalize()
-                except ValueError:
-                    cmd = self.registryValue('default', channel).capitalize()
-                try:
-                    shortUrl = getattr(self, '_get%sUrl' % cmd)(url)
+                    if cmd == 'ln':
+                        (shortUrl, _) = self._getLnUrl(url)
+                    elif cmd == 'tiny':
+                        shortUrl = self._getTinyUrl(url)
                     text = text.replace(url, shortUrl)
-                except (utils.web.Error, AttributeError, ShrinkError):
+                except utils.web.Error:
                     pass
         newMsg = ircmsgs.privmsg(channel, text, msg=msg)
         newMsg.tag('shrunken')
@@ -113,6 +118,7 @@ class ShrinkUrl(callbacks.PluginRegexp):
         return msg
 
     def shrinkSnarfer(self, irc, msg, match):
+        r"https?://[^\])>\s]{13,}"
         channel = msg.args[0]
         if not irc.isChannel(channel):
             return
@@ -123,16 +129,14 @@ class ShrinkUrl(callbacks.PluginRegexp):
                 self.log.debug('Matched nonSnarfingRegexp: %u', url)
                 return
             minlen = self.registryValue('minimumLength', channel)
-            try:
-                cmd = self.registryValue('serviceRotation',
-                                         channel, value=False)
-                cmd = cmd.getService().capitalize()
-            except ValueError:
-                cmd = self.registryValue('default', channel).capitalize()
+            cmd = self.registryValue('default', channel)
             if len(url) >= minlen:
-                try:
-                    shorturl = getattr(self, '_get%sUrl' % cmd)(url)
-                except (utils.web.Error, AttributeError, ShrinkError):
+                shorturl = None
+                if cmd == 'tiny':
+                    shorturl = self._getTinyUrl(url)
+                elif cmd == 'ln':
+                    (shorturl, _) = self._getLnUrl(url)
+                if shorturl is None:
                     self.log.info('Couldn\'t get shorturl for %u', url)
                     return
                 if self.registryValue('shrinkSnarfer.showDomain', channel):
@@ -144,174 +148,84 @@ class ShrinkUrl(callbacks.PluginRegexp):
                 else:
                     s = format('%u%s', shorturl, domain)
                 m = irc.reply(s, prefixNick=False)
-                if m is not None:
-                    m.tag('shrunken')
+                m.tag('shrunken')
     shrinkSnarfer = urlSnarfer(shrinkSnarfer)
-    shrinkSnarfer.__doc__ = utils.web._httpUrlRe
 
     def _getLnUrl(self, url):
         url = utils.web.urlquote(url)
         try:
-            return self.db.get('ln', url)
+            return (self.db.getLn(url), '200')
         except KeyError:
             text = utils.web.getUrl('http://ln-s.net/home/api.jsp?url=' + url)
-            (code, text) = text.split(None, 1)
-            text = text.strip()
+            (code, lnurl) = text.split(None, 1)
+            lnurl = lnurl.strip()
             if code == '200':
-                self.db.set('ln', url, text)
-                return text
+                self.db.setLn(url, lnurl)
             else:
-                raise ShrinkError, text
+                lnurl = None
+            return (lnurl, code)
 
     def ln(self, irc, msg, args, url):
         """<url>
 
         Returns an ln-s.net version of <url>.
         """
-        try:
-            lnurl = self._getLnUrl(url)
+        if len(url) < 17:
+            irc.error('Stop being a lazy-biotch and type the URL yourself.')
+            return
+        (lnurl, error) = self._getLnUrl(url)
+        if lnurl is not None:
+            domain = utils.web.getDomain(url)
             m = irc.reply(lnurl)
-            if m is not None:
-                m.tag('shrunken')
-        except ShrinkError, e:
-            irc.error(str(e))
+            m.tag('shrunken')
+        else:
+            irc.error(error)
     ln = thread(wrap(ln, ['url']))
 
+    def size(self, irc, msg, args, channel, db):
+        """<db>
+
+        Returns size of the ln DB.
+        """
+        if db.lower() == "ln":
+            irc.queueMsg(ircmsgs.privmsg(channel, "Size of Ln: %s" % self.db.getLnSize()))
+        elif db.lower() == "tiny":
+            irc.queueMsg(ircmsgs.privmsg(channel, "Size of Tiny: %s" % self.db.getTinySize()))
+        
+    size = wrap(size, ['Channel', 'somethingWithoutSpaces'])
+
+    _tinyRe = re.compile(r'<blockquote><b>(http://tinyurl\.com/\w+)</b>')
     def _getTinyUrl(self, url):
         try:
-            return self.db.get('tiny', url)
+            return self.db.getTiny(url)
         except KeyError:
-            text = utils.web.getUrl('http://tinyurl.com/api-create.php?url=' + url)
-            if text.startswith('Error'):
-                raise ShrinkError, text[5:]
-            self.db.set('tiny', url, text)
-            return text
+            s = utils.web.getUrl('http://tinyurl.com/create.php?url=' + url)
+            m = self._tinyRe.search(s)
+            if m is None:
+                tinyurl = None
+            else:
+                tinyurl = m.group(1)
+                self.db.setTiny(url, tinyurl)
+            return tinyurl
 
     def tiny(self, irc, msg, args, url):
         """<url>
 
         Returns a TinyURL.com version of <url>
         """
-        try:
-            tinyurl = self._getTinyUrl(url)
+        if len(url) < 20:
+            irc.error('Stop being a lazy-biotch and type the URL yourself.')
+            return
+        tinyurl = self._getTinyUrl(url)
+        if tinyurl is not None:
             m = irc.reply(tinyurl)
             if m is not None:
                 m.tag('shrunken')
-        except ShrinkError, e:
-            irc.errorPossibleBug(str(e))
+        else:
+            s = 'Could not parse the TinyURL.com results page.'
+            irc.errorPossibleBug(s)
     tiny = thread(wrap(tiny, ['url']))
 
-    _xrlApi = 'http://metamark.net/api/rest/simple'
-    def _getXrlUrl(self, url):
-        quotedurl = utils.web.urlquote(url)
-        try:
-            return self.db.get('xrl', quotedurl)
-        except KeyError:
-            data = utils.web.urlencode({'long_url': url})
-            text = utils.web.getUrl(self._xrlApi, data=data)
-            if text.startswith('ERROR:'):
-                raise ShrinkError, text[6:]
-            self.db.set('xrl', quotedurl, text)
-            return text
-
-    def xrl(self, irc, msg, args, url):
-        """<url>
-
-        Returns an xrl.us version of <url>.
-        """
-        try:
-            xrlurl = self._getXrlUrl(url)
-            m = irc.reply(xrlurl)
-            if m is not None:
-                m.tag('shrunken')
-        except ShrinkError, e:
-            irc.error(str(e))
-    xrl = thread(wrap(xrl, ['url']))
-
-    _gooApi = 'https://www.googleapis.com/urlshortener/v1/url'
-    def _getGooUrl(self, url):
-        url = utils.web.urlquote(url)
-        try:
-            return self.db.get('goo', url)
-        except KeyError:
-            headers = utils.web.defaultHeaders.copy()
-            headers['content-type'] = 'application/json'
-            data = json.dumps({'longUrl': url})
-            text = utils.web.getUrl(self._gooApi, data=data, headers=headers)
-            googl = json.loads(text)['id']
-            if googl:
-                self.db.set('goo', url, googl)
-                return googl
-            else:
-                raise ShrinkError, text
-
-    def goo(self, irc, msg, args, url):
-        """<url>
-
-        Returns an goo.gl version of <url>.
-        """
-        try:
-            goourl = self._getGooUrl(url)
-            m = irc.reply(goourl)
-            if m is not None:
-                m.tag('shrunken')
-        except ShrinkError, e:
-            irc.error(str(e))
-    goo = thread(wrap(goo, ['url']))
-
-    _ur1Api = 'http://ur1.ca/'
-    _ur1Regexp = re.compile(r'<a href="(?P<url>[^"]+)">')
-    def _getUr1Url(self, url):
-        try:
-            return self.db.get('ur1ca', utils.web.urlquote(url))
-        except KeyError:
-            parameters = utils.web.urlencode({'longurl': url})
-            response = utils.web.getUrl(self._ur1Api, data=parameters)
-            ur1ca = self._ur1Regexp.search(response.decode()).group('url')
-            if ur1ca > 0 :
-                self.db.set('ur1', url, ur1ca)
-                return ur1ca
-            else:
-                raise ShrinkError, text
-
-    def ur1(self, irc, msg, args, url):
-        """<url>
-
-        Returns an ur1 version of <url>.
-        """
-        try:
-            ur1url = self._getUr1Url(url)
-            m = irc.reply(ur1url)
-            if m is not None:
-                m.tag('shrunken')
-        except ShrinkError, e:
-            irc.error(str(e))
-    ur1 = thread(wrap(ur1, ['url']))
-
-    _x0Api = 'http://api.x0.no/?%s'
-    def _getX0Url(self, url):
-        try:
-            return self.db.get('x0', url)
-        except KeyError:
-            text = utils.web.getUrl(self._x0Api % url)
-            if text.startswith('ERROR:'):
-                raise ShrinkError, text[6:]
-            self.db.set('x0', url, text)
-            return text
-
-    def x0(self, irc, msg, args, url):
-        """<url>
-
-        Returns an x0.no version of <url>.
-        """
-        try:
-            x0url = self._getX0Url(url)
-            m = irc.reply(x0url)
-            if m is not None:
-                m.tag('shrunken')
-        except ShrinkError, e:
-            irc.error(str(e))
-    x0 = thread(wrap(x0, ['url']))
 
 Class = ShrinkUrl
 

@@ -1,6 +1,5 @@
 ###
 # Copyright (c) 2003-2005, Jeremiah Fincher
-# Copyright (c) 2010, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -30,15 +29,19 @@
 
 import re
 import random
+import time
 
 import supybot.utils as utils
+import supybot.world as world
 from supybot.commands import *
+import supybot.plugins as plugins
 import supybot.ircmsgs as ircmsgs
 import supybot.ircutils as ircutils
 import supybot.callbacks as callbacks
 
 
 class Games(callbacks.Plugin):
+            
     def coin(self, irc, msg, args):
         """takes no arguments
 
@@ -58,8 +61,8 @@ class Games(callbacks.Plugin):
         ten-sided dice.
         """
         (dice, sides) = utils.iter.imap(int, m.groups())
-        if dice > 1000:
-            irc.error('You can\'t roll more than 1000 dice.')
+        if dice > 6:
+            irc.error('You can\'t roll more than 6 dice.')
         elif sides > 100:
             irc.error('Dice can\'t have more than 100 sides.')
         elif sides < 3:
@@ -112,34 +115,128 @@ class Games(callbacks.Plugin):
             irc.reply(self._checkTheBall(random.randint(0, 2)))
     eightball = wrap(eightball, [additional('text')])
 
-    _rouletteChamber = random.randrange(0, 6)
-    _rouletteBullet = random.randrange(0, 6)
-    def roulette(self, irc, msg, args, spin):
-        """[spin]
+    _chamberSizeMin = 0
+    _chamberSizeMax = 6
+    _chamberMin = 0
+    _chamberMax = 6
+    _bulletMin = 0
+    _bulletMax = 6
+    rng = random.Random()
+    rng.seed()
+    _rouletteChamber = rng.randrange(_chamberMin, _chamberMax)
+    _rouletteBullet = rng.randrange(_bulletMin, _bulletMax)
+    #def roulette(self, irc, msg, args, spin):
+    def roulette(self, irc, msg, args, nick):
+        """[spin|nick]
 
         Fires the revolver.  If the bullet was in the chamber, you're dead.
         Tell me to spin the chambers and I will.
         """
-        if spin:
-            self._rouletteBullet = random.randrange(0, 6)
+        chamberSize = self._chamberSizeMax
+        #if spin:
+        if nick.lower() == 'spin':
+            self._rouletteBullet = self.rng.randrange(0, chamberSize)
             irc.reply('*SPIN* Are you feeling lucky?', prefixNick=False)
             return
+        
         channel = msg.args[0]
+        
+        nickFound = False
+        if nick.lower() == '':
+            nick = msg.nick
+            nickFound = True
+        elif nick.lower() == 'random':
+            nicks = list(irc.state.channels[channel].users)
+            if len(nicks) >= 2:
+                nickCount = 0
+                nick = self.rng.choice(nicks)
+                while nickCount < 99 and nick in self.registryValue('exclusions', msg.args[0]):
+                    nick = self.rng.choice(nicks)
+                    nickCount += 1
+                    
+                if nickCount >= 98:
+                    nick = msg.nick
+                
+            else:
+                nick = msg.nick
+                
+            nickFound = True
+        elif nick.lower() == msg.nick.lower():
+            nick = nick
+            nickFound = True
+        else:
+            for nickTry in self.registryValue('exclusions', channel):
+                if nick.lower() == nickTry.lower():
+                    irc.sendMsg(ircmsgs.action(channel, '%s rips the pistol out of your hand and points it at you!' % nick))
+                    nick = msg.nick
+                    nickFound = True
+                    break
+            if not nickFound:
+                for nickTry in list(irc.state.channels[channel].users):
+                    if nick.lower() == nickTry.lower():
+                        nick = nick
+                        nickFound = True
+                        break
+        if not nickFound:
+            nick = msg.nick
+            irc.reply('%s: You didn\'t point the pistol at a real Nick, so it defaults to you :)' % nick, prefixNick=False)
+            
         if self._rouletteChamber == self._rouletteBullet:
-            self._rouletteBullet = random.randrange(0, 6)
-            self._rouletteChamber = random.randrange(0, 6)
+            self._rouletteChamber = self.rng.randrange(self._chamberMin, self._chamberMax)
+            self._rouletteBullet = self.rng.randrange(self._bulletMin, self._bulletMax)
             if irc.nick in irc.state.channels[channel].ops:
-                irc.queueMsg(ircmsgs.kick(channel, msg.nick, 'BANG!'))
+                irc.sendMsg(ircmsgs.privmsg(channel, '%s: BANG!!' % nick))
+                irc.queueMsg(ircmsgs.kick(channel, nick, 'BANG!'))
             else:
                 irc.reply('*BANG* Hey, who put a blank in here?!',
                           prefixNick=False)
             irc.reply('reloads and spins the chambers.', action=True)
         else:
-            irc.reply('*click*')
+            irc.sendMsg(ircmsgs.privmsg(channel, '%s: *click*' % nick))
             self._rouletteChamber += 1
-            self._rouletteChamber %= 6
-    roulette = wrap(roulette, ['public', additional(('literal', 'spin'))])
+            self._rouletteChamber %= chamberSize
+    #roulette = wrap(roulette, ['public', additional(('literal', 'spin'))])
+    roulette = wrap(roulette, ['public', additional('text','')])
 
+    def randroulette(self, irc, msg, args, channel):
+        """takes no arguments
+
+        Keeps firing the revolver at a random person in the channel 
+        until it fires.
+        """
+        
+        chamberSize = self._chamberSizeMax
+        nicks = list(irc.state.channels[channel].users)
+        
+        while True:
+            nickCount = 0
+            nick = self.rng.choice(nicks)
+            while nickCount < 99 and nick in self.registryValue('exclusions', channel):
+                nick = self.rng.choice(nicks)
+                nickCount += 1
+                
+            if nickCount >= 98:
+                nick = msg.nick
+            
+            if self._rouletteChamber == self._rouletteBullet:
+                break
+            else:
+                irc.sendMsg(ircmsgs.privmsg(channel, '%s: *click*' % nick))
+                self._rouletteChamber += 1
+                self._rouletteChamber %= chamberSize
+        
+        self._rouletteChamber = self.rng.randrange(self._chamberMin, self._chamberMax)
+        self._rouletteBullet = self.rng.randrange(self._bulletMin, self._bulletMax)
+        if irc.nick in irc.state.channels[channel].ops:
+            irc.sendMsg(ircmsgs.privmsg(channel, '%s: BANG!!' % nick))
+            irc.queueMsg(ircmsgs.kick(channel, nick, 'BANG!'))
+        else:
+            irc.reply('*BANG* Hey, who put a blank in here?!',
+                      prefixNick=False)
+        irc.reply('reloads and spins the chambers.', action=True)
+        
+    randroulette = wrap(randroulette, ['public', 'Channel'])
+    
     def monologue(self, irc, msg, args, channel):
         """[<channel>]
 
