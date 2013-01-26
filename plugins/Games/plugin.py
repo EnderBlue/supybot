@@ -42,6 +42,20 @@ import supybot.callbacks as callbacks
 
 class Games(callbacks.Plugin):
             
+    def __init__(self, irc):
+        self.__parent = super(Games, self)
+        self.__parent.__init__(irc)
+        self.rng = random.Random()
+        self.rng.seed()
+        self._chamberSizeMin = 0
+        self._chamberSizeMax = 6
+        self._chamberMin = 0
+        self._chamberMax = 1
+        self._bulletMin = 2
+        self._bulletMax = 3
+        self._rouletteChamber = {}
+        self._rouletteBullet = {}
+        
     def coin(self, irc, msg, args):
         """takes no arguments
 
@@ -115,16 +129,6 @@ class Games(callbacks.Plugin):
             irc.reply(self._checkTheBall(random.randint(0, 2)))
     eightball = wrap(eightball, [additional('text')])
 
-    _chamberSizeMin = 0
-    _chamberSizeMax = 6
-    _chamberMin = 0
-    _chamberMax = 6
-    _bulletMin = 0
-    _bulletMax = 6
-    rng = random.Random()
-    rng.seed()
-    _rouletteChamber = rng.randrange(_chamberMin, _chamberMax)
-    _rouletteBullet = rng.randrange(_bulletMin, _bulletMax)
     #def roulette(self, irc, msg, args, spin):
     def roulette(self, irc, msg, args, nick):
         """[spin|nick]
@@ -132,14 +136,19 @@ class Games(callbacks.Plugin):
         Fires the revolver.  If the bullet was in the chamber, you're dead.
         Tell me to spin the chambers and I will.
         """
+        
         chamberSize = self._chamberSizeMax
         #if spin:
+        channel = msg.args[0]
+        
+        if channel not in self._rouletteChamber:
+            self._rouletteChamber[channel] = self.rng.randrange(self._chamberMin, self._chamberMax)
+            self._rouletteBullet[channel] = self.rng.randrange(self._bulletMin, self._bulletMax)
+        
         if nick.lower() == 'spin':
-            self._rouletteBullet = self.rng.randrange(0, chamberSize)
+            self._rouletteBullet[channel] = self.rng.randrange(0, chamberSize)
             irc.reply('*SPIN* Are you feeling lucky?', prefixNick=False)
             return
-        
-        channel = msg.args[0]
         
         nickFound = False
         if nick.lower() == '':
@@ -181,9 +190,9 @@ class Games(callbacks.Plugin):
             nick = msg.nick
             irc.reply('%s: You didn\'t point the pistol at a real Nick, so it defaults to you :)' % nick, prefixNick=False)
             
-        if self._rouletteChamber == self._rouletteBullet:
-            self._rouletteChamber = self.rng.randrange(self._chamberMin, self._chamberMax)
-            self._rouletteBullet = self.rng.randrange(self._bulletMin, self._bulletMax)
+        if self._rouletteChamber[channel] == self._rouletteBullet[channel]:
+            self._rouletteChamber[channel] = self.rng.randrange(self._chamberMin, self._chamberMax)
+            self._rouletteBullet[channel] = self.rng.randrange(self._bulletMin, self._bulletMax)
             if irc.nick in irc.state.channels[channel].ops:
                 irc.sendMsg(ircmsgs.privmsg(channel, '%s: BANG!!' % nick))
                 irc.queueMsg(ircmsgs.kick(channel, nick, 'BANG!'))
@@ -193,8 +202,8 @@ class Games(callbacks.Plugin):
             irc.reply('reloads and spins the chambers.', action=True)
         else:
             irc.sendMsg(ircmsgs.privmsg(channel, '%s: *click*' % nick))
-            self._rouletteChamber += 1
-            self._rouletteChamber %= chamberSize
+            self._rouletteChamber[channel] += 1
+            self._rouletteChamber[channel] %= chamberSize
     #roulette = wrap(roulette, ['public', additional(('literal', 'spin'))])
     roulette = wrap(roulette, ['public', additional('text','')])
 
@@ -208,6 +217,10 @@ class Games(callbacks.Plugin):
         chamberSize = self._chamberSizeMax
         nicks = list(irc.state.channels[channel].users)
         
+        if channel not in self._rouletteChamber:
+            self._rouletteChamber[channel] = self.rng.randrange(self._chamberMin, self._chamberMax)
+            self._rouletteBullet[channel] = self.rng.randrange(self._bulletMin, self._bulletMax)
+        
         while True:
             nickCount = 0
             nick = self.rng.choice(nicks)
@@ -215,18 +228,18 @@ class Games(callbacks.Plugin):
                 nick = self.rng.choice(nicks)
                 nickCount += 1
                 
-            if nickCount >= 98:
+            if nickCount >= 96:
                 nick = msg.nick
             
-            if self._rouletteChamber == self._rouletteBullet:
+            if self._rouletteChamber[channel] == self._rouletteBullet[channel]:
                 break
             else:
                 irc.sendMsg(ircmsgs.privmsg(channel, '%s: *click*' % nick))
-                self._rouletteChamber += 1
-                self._rouletteChamber %= chamberSize
+                self._rouletteChamber[channel] += 1
+                self._rouletteChamber[channel] %= chamberSize
         
-        self._rouletteChamber = self.rng.randrange(self._chamberMin, self._chamberMax)
-        self._rouletteBullet = self.rng.randrange(self._bulletMin, self._bulletMax)
+        self._rouletteChamber[channel] = self.rng.randrange(self._chamberMin, self._chamberMax)
+        self._rouletteBullet[channel] = self.rng.randrange(self._bulletMin, self._bulletMax)
         if irc.nick in irc.state.channels[channel].ops:
             irc.sendMsg(ircmsgs.privmsg(channel, '%s: BANG!!' % nick))
             irc.queueMsg(ircmsgs.kick(channel, nick, 'BANG!'))
