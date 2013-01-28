@@ -166,7 +166,7 @@ class Google(callbacks.PluginRegexp):
             irc.reply('Google found nothing.')
     lucky = wrap(lucky, ['text'])
 
-    def google(self, irc, msg, args, optlist, text):
+    def google(self, irc, msg, args, optlist, channel, text):
         """<search> [--{filter,language} <value>]
 
         Searches google.com for the given string.  As many results as can fit
@@ -176,18 +176,76 @@ class Google(callbacks.PluginRegexp):
         if 'language' in optlist and optlist['language'].lower() not in \
            conf.supybot.plugins.Google.safesearch.validStrings:
             irc.errorInvalid('language')
-        data = self.search(text, msg.args[0], dict(optlist))
+        prefixNick = True
+        prefixNickUser = False
+        if ">" in text:
+            nickEnd = text.find(">")
+            nickUser = text[:nickEnd]
+            nickUser = nickUser.strip()
+            nicks = list(irc.state.channels[channel].users)
+            if nickUser in nicks:
+                text = text[nickEnd+1:]
+                prefixNickUser = True
+                prefixNick = False
+        data = self.search(text, channel, dict(optlist))
+        if data['responseStatus'] != 200:
+            irc.reply('We broke The Google!')
+            return
+        bold = self.registryValue('bold', channel)
+        max = self.registryValue('maximumResults', channel)
+        if prefixNickUser:
+            s = "%s: " % nickUser
+        else:
+            s = ""
+        irc.reply(s + self.formatData(data['responseData']['results'],
+                                  bold=bold, max=max), prefixNick=prefixNick)
+    google = wrap(google, [getopts({'language':'something',
+                                    'filter':''}),
+                           'Channel',
+                           'text'])
+    
+    def googletest(self, irc, msg, args, optlist, channel, text):
+        """<search> [--{filter,language} <value>]
+
+        Searches google.com for the given string.  As many results as can fit
+        are included.  --language accepts a language abbreviation; --filter
+        accepts a filtering level ('active', 'moderate', 'off').
+        """
+        if 'language' in optlist and optlist['language'].lower() not in \
+           conf.supybot.plugins.Google.safesearch.validStrings:
+            irc.errorInvalid('language')
+        prefixNick = True
+        prefixNickUser = False
+        irc.reply(optlist)
+        irc.reply(text)
+        if ">" in text:
+            nickEnd = text.find(">")
+            nickUser = text[:nickEnd]
+            nickUser = nickUser.strip()
+            nicks = list(irc.state.channels[channel].users)
+            if nickUser in nicks:
+                text = text[nickEnd+1:]
+                prefixNickUser = True
+                prefixNick = False
+                irc.reply("nickUser:'%s'" % nickUser)
+                irc.reply("text:'%s'" % text)
+        data = self.search(text, channel, dict(optlist))
         if data['responseStatus'] != 200:
             irc.reply('We broke The Google!')
             return
         bold = self.registryValue('bold', msg.args[0])
         max = self.registryValue('maximumResults', msg.args[0])
-        irc.reply(self.formatData(data['responseData']['results'],
-                                  bold=bold, max=max))
-    google = wrap(google, [getopts({'language':'something',
+        if prefixNickUser:
+            s = "%s: " % nickUser
+        else:
+            s = ""
+        irc.reply(s + self.formatData(data['responseData']['results'],
+                                  bold=bold, max=max), prefixNick=prefixNick)
+    googletest = wrap(googletest, [getopts({'language':'something',
                                     'filter':''}),
+                           'Channel',
                            'text'])
-
+    
     def cache(self, irc, msg, args, url):
         """<url>
 
